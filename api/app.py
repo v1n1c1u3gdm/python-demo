@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 from flask import Flask, current_app, g, jsonify, redirect, request, send_file
+from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
 from marshmallow import ValidationError
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
@@ -25,6 +26,12 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
     app.wsgi_app = ProxyFix(app.wsgi_app)  # type: ignore
+
+    CORS(
+        app,
+        resources={r"/api-docs*": {"origins": "*"}, r"/*": {"origins": "*"}},
+        supports_credentials=False,
+    )
 
     db.init_app(app)
     migrate.init_app(app, db)
