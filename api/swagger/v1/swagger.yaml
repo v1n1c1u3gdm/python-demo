@@ -1,0 +1,419 @@
+openapi: 3.0.1
+info:
+  title: Python Demo API
+  version: v1
+servers:
+  - url: http://localhost:3000
+paths:
+  /authors:
+    get:
+      tags:
+        - Authors
+      summary: Lista autores
+      responses:
+        '200':
+          description: Operação realizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Author'
+    post:
+      tags:
+        - Authors
+      summary: Cria um autor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorInput'
+      responses:
+        '201':
+          description: Autor criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Author'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /authors/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags:
+        - Authors
+      summary: Detalha um autor
+      responses:
+        '200':
+          description: Autor encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Author'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Authors
+      summary: Atualiza um autor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorInput'
+      responses:
+        '200':
+          description: Autor atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Author'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags:
+        - Authors
+      summary: Remove um autor
+      responses:
+        '204':
+          description: Autor removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /socials:
+    get:
+      tags:
+        - Socials
+      summary: Lista perfis sociais
+      responses:
+        '200':
+          description: Operação realizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Social'
+    post:
+      tags:
+        - Socials
+      summary: Cria um perfil social
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialInput'
+      responses:
+        '201':
+          description: Perfil criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Social'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /socials/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags:
+        - Socials
+      summary: Detalha um perfil social
+      responses:
+        '200':
+          description: Perfil localizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Social'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Socials
+      summary: Atualiza um perfil social
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialInput'
+      responses:
+        '200':
+          description: Perfil atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Social'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags:
+        - Socials
+      summary: Remove um perfil social
+      responses:
+        '204':
+          description: Perfil removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /articles:
+    get:
+      tags:
+        - Articles
+      summary: Lista artigos
+      responses:
+        '200':
+          description: Operação realizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Article'
+    post:
+      tags:
+        - Articles
+      summary: Cria um artigo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleInput'
+      responses:
+        '201':
+          description: Artigo criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /articles/count_by_author:
+    get:
+      tags:
+        - Articles
+      summary: Conta artigos agrupados por autor
+      responses:
+        '200':
+          description: Operação realizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArticlesCountByAuthor'
+  /articles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags:
+        - Articles
+      summary: Detalha um artigo
+      responses:
+        '200':
+          description: Artigo localizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Articles
+      summary: Atualiza um artigo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleInput'
+      responses:
+        '200':
+          description: Artigo atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags:
+        - Articles
+      summary: Remove um artigo
+      responses:
+        '204':
+          description: Artigo removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    ResourceId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+      description: Identificador do recurso
+  responses:
+    NotFound:
+      description: Recurso não encontrado
+    Unprocessable:
+      description: A entidade enviada é inválida
+  schemas:
+    Author:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        birthdate:
+          type: string
+          format: date
+        photo_url:
+          type: string
+          format: uri
+        public_key:
+          type: string
+        socials:
+          type: array
+          items:
+            $ref: '#/components/schemas/Social'
+        articles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Article'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AuthorInput:
+      type: object
+      properties:
+        author:
+          type: object
+          required:
+            - name
+            - birthdate
+            - photo_url
+            - public_key
+          properties:
+            name:
+              type: string
+            birthdate:
+              type: string
+              format: date
+            photo_url:
+              type: string
+              format: uri
+            public_key:
+              type: string
+    Social:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        profile_link:
+          type: string
+          format: uri
+        description:
+          type: string
+        author_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SocialInput:
+      type: object
+      properties:
+        social:
+          type: object
+          required:
+            - slug
+            - profile_link
+            - description
+            - author_id
+          properties:
+            slug:
+              type: string
+            profile_link:
+              type: string
+              format: uri
+            description:
+              type: string
+            author_id:
+              type: integer
+    Article:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        slug:
+          type: string
+        published_label:
+          type: string
+        post_entry:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        author_id:
+          type: integer
+        author:
+          $ref: '#/components/schemas/Author'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ArticleInput:
+      type: object
+      properties:
+        article:
+          type: object
+          required:
+            - title
+            - slug
+            - published_label
+            - post_entry
+            - author_id
+          properties:
+            title:
+              type: string
+            slug:
+              type: string
+            published_label:
+              type: string
+            post_entry:
+              type: string
+            tags:
+              type: array
+              items:
+                type: string
+            author_id:
+              type: integer
+    ArticlesCountByAuthor:
+      type: object
+      properties:
+        author_id:
+          type: integer
+        author_name:
+          type: string
+        articles_count:
+          type: integer

@@ -1,0 +1,51 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api-app
+    working_dir: /app/api
+    command: gunicorn -b 0.0.0.0:3000 -w 4 --threads 4 app:app
+    environment:
+      FLASK_ENV: development
+      DATABASE_URL: mysql+pymysql://ruby-demo:2u8y-c0d3@db:3306/ruby_demo_development
+      VINICIUS_PUBLIC_KEY: "${VINICIUS_PUBLIC_KEY:-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakePublicKeyForViniciusSeedRecord}"
+      LOG_DIR: /app/api/logs
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./api:/app/api
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ui-app
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ruby_demo_development
+      MYSQL_USER: ruby-demo
+      MYSQL_PASSWORD: 2u8y-c0d3
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-proot"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
