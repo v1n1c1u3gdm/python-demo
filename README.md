@@ -1,6 +1,6 @@
 # Python Demo (Flask 3 API + MySQL)
 
-Repositório recriado para manter o mesmo contrato da aplicação Ruby original, agora com uma API Flask 3 rodando sobre **python:3.14.0-slim**, servida pelo Gunicorn e usando MySQL containerizado. A raiz continua dividida em dois módulos:
+Repositório inaugurado com uma API Flask 3 rodando sobre **python:3.14.0-slim**, servida pelo Gunicorn e usando MySQL containerizado. A raiz está organizada em dois módulos:
 
 - `api/` – API Flask modular (blueprints) com SQLAlchemy 2, Flask-Migrate, seeds determinísticos e documentação Swagger.
 - `ui/` – front-end Vue 2 + BootstrapVue, com Jest e Vue Test Utils (cobertura mínima de 85%) consumindo exatamente os mesmos endpoints.
