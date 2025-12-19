@@ -1,0 +1,106 @@
+{
+  "realm": "python-demo",
+  "enabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "clients": [
+    {
+      "clientId": "python-demo-ui",
+      "name": "Python Demo UI",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "http://localhost:8080",
+      "baseUrl": "http://localhost:8080",
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ]
+    },
+    {
+      "clientId": "python-demo-api",
+      "name": "Python Demo API",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "secret": "python-demo-api-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "access.token.lifespan": "900",
+        "refresh.token.lifespan": "3600"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Full administrative access to protected endpoints.",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "python-demo"
+      },
+      {
+        "name": "author",
+        "description": "Can access authoring capabilities.",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "python-demo"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@example.com",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": [
+        "admin",
+        "author"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin!123",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "vinicius",
+      "email": "vinicius@example.com",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": [
+        "author"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "vinicius!123",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,4 +1,5 @@
 def register_blueprints(app):
+    from .auth import bp as auth_bp
     from .articles import bp as articles_bp
     from .authors import bp as authors_bp
     from .health import bp as health_bp
@@ -6,6 +7,7 @@ def register_blueprints(app):
     from .socials import bp as socials_bp
     from .tech import bp as tech_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(articles_bp)
     app.register_blueprint(authors_bp)
     app.register_blueprint(metrics_bp)

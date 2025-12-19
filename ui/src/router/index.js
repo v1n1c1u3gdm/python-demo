@@ -4,6 +4,7 @@ import Router from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import ArticleView from '@/views/ArticleView.vue'
 import AboutView from '@/views/AboutView.vue'
+import AdminLoginView from '@/views/AdminLoginView.vue'
 
 Vue.use(Router)
 
@@ -25,6 +26,11 @@ export default new Router({
       path: '/about',
       name: 'about',
       component: AboutView
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: AdminLoginView
     }
   ]
 })

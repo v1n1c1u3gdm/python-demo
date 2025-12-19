@@ -87,7 +87,8 @@ export default {
         { label: 'estudos', href: 'https://viniciusmenezes.com/bookstack', external: true },
         { label: 'postagens por tipo', href: 'https://viniciusmenezes.com/tags/' },
         { label: 'profissional', href: 'https://www.linkedin.com/in/menezesvinicius/', external: true },
-        { label: 'sobre', routeName: 'about' }
+        { label: 'sobre', routeName: 'about' },
+        { label: 'admin', routeName: 'admin' }
       ]
     }
   },

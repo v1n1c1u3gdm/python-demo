@@ -10,6 +10,7 @@ Repositório inaugurado com uma API Flask 3 rodando sobre **python:3.14.0-slim**
 - **API (`api/`)**: Flask 3.0 + Gunicorn, SQLAlchemy 2 com PyMySQL, migrations Alembic via Flask-Migrate, seeds idempotentes a partir de `seeds/article_seed_data.json` e documentação Swagger reutilizando `swagger/v1/swagger.yaml`. A instrumentação usa `opentelemetry-sdk` + `opentelemetry-instrumentation-flask` para expor `GET /metrics` em formato Prometheus/OpenMetrics. Logs HTTP e SQLAlchemy são gravados em `api/logs/`.
 - **UI (`ui/`)**: Vue 2 (Vue CLI) com BootstrapVue, Build multi-stage (Node → NGINX) compartilhando o mesmo `Dockerfile`. Testes unitários com Jest + Vue Test Utils garantindo ≥85% de cobertura.
 - **Banco (`db/`)**: MySQL 8.4 em container dedicado com volume `mysql_data` e credenciais fixas (`ruby-demo` / `2u8y-c0d3`).
+- **Identidade (`keycloak/`)**: Keycloak 26.4.7 sobe via Docker com realm importado automaticamente, dois papéis (`admin`, `author`) e usuários seeded (`admin`, `vinicius`).
 - **Orquestração**: `docker-compose.yml` define `api`, `ui` e `db`, injeta `DATABASE_URL`, `VINICIUS_PUBLIC_KEY`, `LOG_DIR`, `FLASK_ENV` e garante que migrations + seeds executem automaticamente no primeiro boot.
 
 ## Stack
@@ -31,6 +32,8 @@ Repositório inaugurado com uma API Flask 3 rodando sobre **python:3.14.0-slim**
 - `GET /metrics` – counters/latency/liveness em OpenMetrics.
 - `GET /tech` – relatório HTML (“tabelaço”) com host/runtime/banco/config/env/pacotes/licenças.
 - `GET /` – redirect para `/api-docs`.
+- `POST /login` – proxy para o Keycloak (Resource Owner Password) retornando tokens + roles.
+- `GET /admin/profile` – endpoint protegido que exige o role `admin`.
 
 ## Como iniciar com Docker
 
@@ -38,6 +41,7 @@ Repositório inaugurado com uma API Flask 3 rodando sobre **python:3.14.0-slim**
 
 - Docker 24+ e Docker Compose v2.
 - Portas livres: 3000 (API), 3306 (MySQL) e 8080 (UI).
+- Porta 8081 para o Keycloak + 8443 (interno) caso queira acessar a console administrativa.
 
 ### Passo a passo rápido
 
@@ -50,6 +54,7 @@ docker compose up
 - As migrations Flask-Migrate e os seeds são executados automaticamente no startup do container `api`.
 - A UI sobe após a API estar pronta e fica disponível em `http://localhost:8080/`.
 - Swagger continua em `http://localhost:3000/api-docs`.
+- Keycloak fica disponível em `http://localhost:8081/` (Admin Console) com `KEYCLOAK_ADMIN=admin` e `KEYCLOAK_ADMIN_PASSWORD=admin!123`. A importação do realm (`keycloak/realm-python-demo.json`) ocorre no primeiro boot.
 
 ### Variáveis relevantes
 
@@ -58,6 +63,33 @@ docker compose up
 | `DATABASE_URL` | `mysql+pymysql://ruby-demo:2u8y-c0d3@db:3306/ruby_demo_development` | DSN SQLAlchemy utilizado pela API. |
 | `VINICIUS_PUBLIC_KEY` | chave fake usada no seed | Pode ser trocada para regenerar os dados seeded. |
 | `LOG_DIR` | `/app/api/logs` | Diretório de `app.log` e `sqlalchemy.log`. |
+| `KEYCLOAK_BASE_URL` | `http://keycloak:8080` | Host usado pela API para conversar com o Keycloak. |
+| `KEYCLOAK_REALM` | `python-demo` | Realm importado a partir de `keycloak/realm-python-demo.json`. |
+| `KEYCLOAK_CLIENT_ID` | `python-demo-api` | Client confidencial usado no fluxo de senha. |
+| `KEYCLOAK_CLIENT_SECRET` | `python-demo-api-secret` | Segredo do client confidencial. |
+| `KEYCLOAK_ADMIN_ROLE` | `admin` | Papel necessário para acessar `/admin/profile`. |
+
+### Autenticação Keycloak & área `/admin`
+
+- Usuários seeded:
+  - `admin` / `admin!123` – roles `admin` e `author`.
+  - `vinicius` / `vinicius!123` – role `author`.
+- Console administrativa: `http://localhost:8081/` (usar `admin` / `admin!123` configurado via `KEYCLOAK_ADMIN*`).
+- Fluxo de login:
+  1. UI em `http://localhost:8080/admin` envia `username` + `password` para `POST http://localhost:3000/login`.
+  2. A API repassa as credenciais ao Keycloak (`Resource Owner Password Credentials`) e retorna `access_token`, `refresh_token`, `roles`, `expires_in`.
+  3. O token fica salvo em `sessionStorage` e pode ser usado para bater em `GET http://localhost:3000/admin/profile`, que só responde para quem possui o role `admin`.
+- Para testar manualmente:
+  ```bash
+  curl -s -X POST http://localhost:3000/login \
+    -H 'Content-Type: application/json' \
+    -d '{"username":"admin","password":"admin!123"}' | jq .
+
+  curl -s http://localhost:3000/admin/profile \
+    -H "Authorization: Bearer <access_token>" | jq .
+  ```
+
+Se quiser ajustar o realm, edite `keycloak/realm-python-demo.json` e recomece o container `keycloak` com `docker compose up -d --force-recreate keycloak`.
 
 ## Desenvolvimento fora do Docker
 

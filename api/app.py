@@ -17,6 +17,7 @@ from observability import MetricsFormatter, ObservabilityMetrics
 from blueprints import register_blueprints
 from seeds import bootstrap_seed_data
 import models  # noqa: F401  # Ensure models are registered before migrations
+from services.keycloak_client import init_keycloak_client
 
 
 def create_app() -> Flask:
@@ -47,6 +48,7 @@ def create_app() -> Flask:
     register_error_handlers(app, observability)
     register_request_hooks(app, observability)
     register_blueprints(app)
+    init_keycloak_client(app)
 
     if not app.config.get("TESTING"):
         with app.app_context():

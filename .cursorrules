@@ -1,0 +1,76 @@
+# Regras do Cursor para o projeto audit-infra
+
+## REGRA OBRIGATÓRIA: Execução de Testes com Cobertura
+
+**VOCÊ DEVE EXECUTAR OS TESTES COM COBERTURA APÓS TODA E QUALQUER IMPLEMENTAÇÃO, ANTES DE FINALIZAR A TAREFA.**
+
+### Comando Obrigatório (EXECUTE SEMPRE):
+
+```bash
+export PYTEST_CURRENT_TEST="true"
+export FLASK_ENV="testing"
+export LOG_TO_FILE="false"
+python3 -m pytest api/tests -v --cov=. --cov-report=term-missing --cov-report=html:data/coverage/html --cov-report=xml:data/coverage/coverage.xml --tb=short --junitxml=data/coverage/pytest-report.xml
+```
+
+### Regras:
+
+1. **EXECUTE O COMANDO ACIMA APÓS CADA IMPLEMENTAÇÃO** - Não finalize a tarefa sem executar
+2. **EXIBA O RELATÓRIO DE COBERTURA** - O comando já inclui `--cov-report=term-missing`
+3. **CORRIJA FALHAS ANTES DE CONTINUAR** - Se testes falharem, corrija primeiro
+4. **NÃO PULE ESTA ETAPA** - É obrigatória para todas as implementações
+
+## REGRA OBRIGATÓRIA: Recriação de Containers
+
+**APÓS MODIFICAR QUALQUER ASPECTO DO CÓDIGO, OS CONTAINERS DEVEM SER RECRIADOS.**
+
+### Comando Obrigatório (EXECUTE SEMPRE):
+
+```bash
+docker compose down
+docker compose up --build -d
+```
+
+### Regras:
+
+1. **RECRIE OS CONTAINERS APÓS QUALQUER MUDANÇA NO CÓDIGO** - Não finalize a tarefa sem recriar
+2. **USE `--build` PARA FORÇAR REBUILD** - Garante que as mudanças sejam aplicadas
+3. **USE `-d` PARA EXECUTAR EM BACKGROUND** - Permite continuar trabalhando
+4. **VERIFIQUE SE OS CONTAINERS SUBIRAM CORRETAMENTE** - Confirme que não há erros após a recriação
+
+## REGRA OBRIGATÓRIA: Documentação Centralizada
+
+**TODA E QUALQUER DOCUMENTAÇÃO DEVE SER FEITA APENAS NO ARQUIVO `README.md` NA RAIZ DO PROJETO.**
+
+### Regras:
+
+1. **NÃO CRIE ARQUIVOS DE DOCUMENTAÇÃO SEPARADOS** - Toda documentação deve estar no `README.md`
+2. **NÃO CRIE PASTAS DE DOCUMENTAÇÃO** - Não crie pastas como `docs/`, `documentation/`, etc.
+3. **ATUALIZE O `README.md`** - Sempre que houver mudanças que precisem ser documentadas, atualize o `README.md`
+4. **USE O `README.md` EXISTENTE** - O arquivo já possui estrutura organizada, adicione conteúdo nas seções apropriadas
+5. **NÃO DUPLIQUE DOCUMENTAÇÃO** - Mantenha uma única fonte de verdade no `README.md`
+6. **NUNCA DOCUMENTE SEM SOLICITAÇÃO** - Apenas documente quando explicitamente solicitado pelo usuário. Não adicione documentação proativamente.
+
+## REGRA OBRIGATÓRIA: Sem Scripts de Helper
+
+**NUNCA CRIE SCRIPTS DE HELPER OU CÓDIGO FORA DO FLUXO DA APLICAÇÃO SEM SOLICITAÇÃO EXPLÍCITA.**
+
+### Regras:
+
+1. **NÃO CRIE SCRIPTS DE AUTOMAÇÃO** - Não crie scripts para automatizar o fluxo de desenvolvimento
+2. **NÃO CRIE UTILITÁRIOS DE DESENVOLVIMENTO** - Não crie ferramentas, helpers ou scripts auxiliares
+3. **CÓDIGO FORA DA APLICAÇÃO APENAS SE SOLICITADO** - Só escreva código fora do fluxo da aplicação quando explicitamente pedido
+4. **FOQUE NO CÓDIGO DA APLICAÇÃO** - Mantenha o foco apenas no código que faz parte da aplicação em si
+
+## REGRA OBRIGATÓRIA: Sem Commits ou Push Automáticos
+
+**NUNCA REALIZE COMMITS OU PUSH SEM SER SOLICITADO EXPLICITAMENTE.**
+
+### Regras:
+
+1. **NÃO FAÇA COMMITS AUTOMATICAMENTE** - Não execute `git commit` sem solicitação explícita
+2. **NÃO FAÇA PUSH AUTOMATICAMENTE** - Não execute `git push` sem solicitação explícita
+3. **NÃO SUGIRA MENSAGENS DE COMMIT** - Não crie ou sugira mensagens de commit sem ser pedido
+4. **APENAS ADICIONE ARQUIVOS AO STAGE** - Você pode usar `git add` quando necessário, mas nunca commite sem solicitação
+5. **RESPEITE O CONTROLE DO USUÁRIO** - O controle de versionamento é responsabilidade do usuário
+
