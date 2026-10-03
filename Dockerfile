@@ -1,4 +1,4 @@
-FROM python:3.14.0-slim AS api-app
+FROM python:3.14.7-slim AS api-app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -26,13 +26,23 @@ EXPOSE 3000
 CMD ["gunicorn", "-b", "0.0.0.0:3000", "-w", "4", "--threads", "4", "app:app"]
 
 # -------- Vue build stage --------
-FROM node:lts-alpine AS ui-build
+FROM node:24-alpine AS ui-build
 WORKDIR /app
 COPY ui/package*.json ./
-RUN npm install
+RUN npm ci
 COPY ui/ .
-ARG VUE_APP_ARTICLES_URL=http://localhost:3000/articles
-ENV VUE_APP_ARTICLES_URL=${VUE_APP_ARTICLES_URL}
+ARG VITE_API_BASE_URL=http://localhost:3000
+ARG VITE_ARTICLES_URL=http://localhost:3000/articles
+ARG VITE_AUTHORS_URL=http://localhost:3000/authors
+ARG VITE_ARTICLES_COUNT_URL=http://localhost:3000/articles/count_by_author
+ARG VITE_SOCIALS_URL=http://localhost:3000/socials
+ARG VITE_ARTICLE_PUBLIC_BASE_URL=https://viniciusmenezes.com
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+    VITE_ARTICLES_URL=${VITE_ARTICLES_URL} \
+    VITE_AUTHORS_URL=${VITE_AUTHORS_URL} \
+    VITE_ARTICLES_COUNT_URL=${VITE_ARTICLES_COUNT_URL} \
+    VITE_SOCIALS_URL=${VITE_SOCIALS_URL} \
+    VITE_ARTICLE_PUBLIC_BASE_URL=${VITE_ARTICLE_PUBLIC_BASE_URL}
 RUN npm run build
 
 # -------- Vue runtime stage --------

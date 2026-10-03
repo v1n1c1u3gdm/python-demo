@@ -1,13 +1,27 @@
 <template>
   <div class="socials-view">
-    <p v-if="isLoading" class="socials-view__state">Carregando redes...</p>
-    <p v-else-if="error" class="socials-view__state socials-view__state--error">
+    <p
+      v-if="isLoading"
+      class="socials-view__state"
+    >
+      Carregando redes...
+    </p>
+    <p
+      v-else-if="error"
+      class="socials-view__state socials-view__state--error"
+    >
       {{ error }}
     </p>
-    <p v-else-if="!normalizedSocials.length" class="socials-view__state">
+    <p
+      v-else-if="!normalizedSocials.length"
+      class="socials-view__state"
+    >
       Nenhuma rede social cadastrada.
     </p>
-    <div v-else class="socials-view__list">
+    <div
+      v-else
+      class="socials-view__list"
+    >
       <a
         v-for="social in normalizedSocials"
         :key="social.slug"
@@ -18,7 +32,7 @@
         rel="noopener noreferrer"
         :class="['social-icon', social.variant]"
       >
-        <i :class="social.icon"></i>
+        <i :class="social.icon" />
       </a>
     </div>
   </div>

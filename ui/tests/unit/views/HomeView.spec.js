@@ -1,21 +1,20 @@
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { mount } from '../../support/mount.js'
 import flushPromises from 'flush-promises'
 import HomeView from '@/views/HomeView.vue'
 import { fetchArticles, buildArticleUrl } from '@/services/articlesService'
 import { makeArticles } from '../factories/articles'
 
-jest.mock('@/components/SiteLayout.vue', () => ({
-  name: 'SiteLayout',
-  render(h) {
-    const left = this.$scopedSlots['main-left'] ? this.$scopedSlots['main-left']() : null
-    const right = this.$scopedSlots['main-right'] ? this.$scopedSlots['main-right']() : null
-    return h('div', { class: 'site-layout-stub' }, [left, right])
+vi.mock('@/components/SiteLayout.vue', () => ({
+  default: {
+    name: 'SiteLayout',
+    template: '<div class="site-layout-stub"><slot name="main-left"/><slot name="main-right"/></div>'
   }
 }))
 
-jest.mock('@/services/articlesService', () => ({
-  fetchArticles: jest.fn(),
-  buildArticleUrl: jest.fn(slug => `https://example.com/${slug}`)
+vi.mock('@/services/articlesService', () => ({
+  fetchArticles: vi.fn(),
+  buildArticleUrl: vi.fn(slug => `https://example.com/${slug}`)
 }))
 
 const RouterLinkStub = {
@@ -50,7 +49,7 @@ describe('HomeView', () => {
     expect(wrapper.findAll('.feed__item').length).toBe(wrapper.vm.perPage)
     expect(wrapper.find('.pagination__info').text()).toContain('Página 1 de 2')
 
-    const nextButton = wrapper.findAll('.btn--icon').at(1)
+    const nextButton = wrapper.findAll('.btn--icon')[1]
     await nextButton.trigger('click')
     await wrapper.vm.$nextTick()
 
@@ -90,4 +89,3 @@ describe('HomeView', () => {
     expect(wrapper.find('.feed__item time').exists()).toBe(true)
   })
 })
-

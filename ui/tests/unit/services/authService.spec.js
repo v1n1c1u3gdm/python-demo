@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as authServiceModule from '@/services/authService'
 
 const { login, fetchAdminProfile, persistSession, getStoredSession, clearSession, runtimeGuards } =
@@ -7,26 +8,26 @@ const mockResponse = (ok, data, status = 200, statusText = 'OK') => ({
   ok,
   status,
   statusText,
-  json: jest.fn().mockResolvedValue(data),
+  json: vi.fn().mockResolvedValue(data),
   clone() {
     return {
       ok,
       status,
       statusText,
-      json: jest.fn().mockResolvedValue(data)
+      json: vi.fn().mockResolvedValue(data)
     }
   }
 })
 
 describe('authService', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
-    global.fetch = jest.fn()
+    vi.clearAllMocks()
+    global.fetch = vi.fn()
     window.sessionStorage.clear()
   })
 
   it('skips storage interactions when window is undefined', () => {
-    const spy = jest.spyOn(runtimeGuards, 'hasWindow').mockReturnValue(false)
+    const spy = vi.spyOn(runtimeGuards, 'hasWindow').mockReturnValue(false)
 
     expect(persistSession({ username: 'ghost' })).toBeUndefined()
     expect(getStoredSession()).toBeNull()
@@ -35,22 +36,28 @@ describe('authService', () => {
     spy.mockRestore()
   })
 
-  it('normalizes the API base URL from environment variables', () => {
-    const originalValue = process.env.VUE_APP_API_BASE_URL
+  it('uses the default API URL when the Vite setting is empty', async () => {
+    // Arrange
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    vi.resetModules()
 
-    process.env.VUE_APP_API_BASE_URL = ''
-    jest.isolateModules(() => {
-      const { getApiBaseUrl } = require('@/services/authService')
-      expect(getApiBaseUrl()).toBe('http://localhost:3000')
-    })
+    // Act
+    const { getApiBaseUrl } = await import('@/services/authService')
 
-    process.env.VUE_APP_API_BASE_URL = 'http://localhost:4100///'
-    jest.isolateModules(() => {
-      const { getApiBaseUrl } = require('@/services/authService')
-      expect(getApiBaseUrl()).toBe('http://localhost:4100')
-    })
+    // Assert
+    expect(getApiBaseUrl()).toBe('http://localhost:3000')
+  })
 
-    process.env.VUE_APP_API_BASE_URL = originalValue
+  it('normalizes trailing slashes in the Vite API URL', async () => {
+    // Arrange
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:4100///')
+    vi.resetModules()
+
+    // Act
+    const { getApiBaseUrl } = await import('@/services/authService')
+
+    // Assert
+    expect(getApiBaseUrl()).toBe('http://localhost:4100')
   })
 
   it('performs login via POST and returns payload', async () => {
@@ -124,4 +131,3 @@ describe('authService', () => {
     await expect(fetchAdminProfile()).rejects.toThrow('Token não informado.')
   })
 })
-

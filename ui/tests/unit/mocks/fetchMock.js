@@ -1,5 +1,7 @@
+import { vi } from 'vitest'
+
 export function createFetchResponse({ ok = true, status = 200, statusText = 'OK', jsonData = null } = {}) {
-  const json = jest.fn(() => Promise.resolve(jsonData))
+  const json = vi.fn(() => Promise.resolve(jsonData))
   return {
     ok,
     status,
@@ -34,4 +36,3 @@ export function createDeferred() {
   })
   return deferred
 }
-

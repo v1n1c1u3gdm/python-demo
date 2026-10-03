@@ -6,6 +6,7 @@ from flask import current_app
 
 from extensions import db
 from models import Article, Author, SeedRun, Social
+
 from .data import AUTHOR_SEED, SEED_NAME, SOCIALS_SEED
 
 

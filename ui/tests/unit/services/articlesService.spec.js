@@ -1,3 +1,4 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchArticles,
   fetchArticleBySlug,
@@ -78,16 +79,15 @@ describe('articlesService', () => {
     expect(buildArticleUrl(null)).toBeNull()
   })
 
-  it('normalizes public base URL coming from env', () => {
-    const prev = process.env.VUE_APP_ARTICLE_PUBLIC_BASE_URL
-    process.env.VUE_APP_ARTICLE_PUBLIC_BASE_URL = 'https://example.com/blog///'
+  it('normalizes the public base URL from Vite environment settings', async () => {
+    // Arrange
+    vi.stubEnv('VITE_ARTICLE_PUBLIC_BASE_URL', 'https://example.com/blog///')
+    vi.resetModules()
 
-    jest.isolateModules(() => {
-      const { buildArticleUrl: isolatedBuildArticleUrl } = require('@/services/articlesService')
-      expect(isolatedBuildArticleUrl('slug')).toBe('https://example.com/blog/slug/')
-    })
+    // Act
+    const { buildArticleUrl: buildUrlWithCustomEnvironment } = await import('@/services/articlesService')
 
-    process.env.VUE_APP_ARTICLE_PUBLIC_BASE_URL = prev
+    // Assert
+    expect(buildUrlWithCustomEnvironment('slug')).toBe('https://example.com/blog/slug/')
   })
 })
-

@@ -100,7 +100,25 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "john.doe",
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john.doe@example.com",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": [
+        "admin",
+        "author"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "john.doe!123",
+          "temporary": false
+        }
+      ]
     }
   ]
 }
-

@@ -1,6 +1,6 @@
 const DEFAULT_SOCIALS_URL = 'http://localhost:3000/socials'
 
-const SOCIALS_ENDPOINT = normalizeUrl(process.env.VUE_APP_SOCIALS_URL || DEFAULT_SOCIALS_URL)
+const SOCIALS_ENDPOINT = normalizeUrl(import.meta.env.VITE_SOCIALS_URL || DEFAULT_SOCIALS_URL)
 
 let socialsCache = null
 let inflightRequest = null
@@ -28,7 +28,7 @@ async function request(url, fetchOptions = {}) {
       } else if (payload?.message) {
         errorDetail = payload.message
       }
-    } catch (_) {
+    } catch {
       // noop - mantém detalhe padrão
     }
 

@@ -2,6 +2,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import validates
 
 from extensions import db
+
 from .base import SerializerMixin, TimestampMixin
 
 

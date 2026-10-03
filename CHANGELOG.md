@@ -9,19 +9,49 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Instruções para agentes com TDD, testes fluentes em Arrange–Act–Assert, cobertura mínima de 85% e avaliação de cobertura antes de cada commit.
+- Usuário de testes John Doe no realm Keycloak, com perfil completo e papéis para validar a área administrativa.
+- Testes do cliente Keycloak com HTTP simulado, bootstrap de seeds e upgrade/downgrade da migration inicial.
+- Testes de inicialização Vue, router, variáveis de ambiente e navegação durante a migração.
+- Configuração pytest-cov de toda a produção Python, incluindo migrations, com gate de 85% somente de linhas.
+- Linters Ruff para Python e markdownlint-cli2 para documentação, com dependências e comandos versionados.
+- ADRs 0031–0037 com escolhas alinhadas de Vue 3, Vite, Vitest, remoção do BootstrapVue sem uso, Ruff,
+  markdownlint-cli2 e planos/specs exclusivamente locais.
+- Instruções para agentes com TDD, testes fluentes em Arrange–Act–Assert, cobertura mínima de 85% e avaliação de
+  cobertura antes de cada commit.
 - Diretrizes para branches e commits semânticos, manutenção do changelog e fluxo de desenvolvimento com Superpowers.
 - Preferência por orquestração com Sol e implementação por subagentes Luna, ambos com esforço de raciocínio médio.
-- Mapa da aplicação em `ARCHITECTURE.md`, com responsabilidades de arquivos, fluxos, limites de escopo e contexto histórico.
-- Registro cumulativo em `adrs/ADR-NNNN.md` com 30 decisões atômicas: 20 reconstruídas do histórico e dez definidas pelo usuário para o desenvolvimento e a manutenção dos registros, incluindo a substituição da política inicial de cobertura.
-- Consulta e atualização obrigatória dos ADRs pelos agentes, com formato, status e regras de substituição definidos em `AGENTS.md`.
-- Regra de lint obrigatório para Markdown, Python e JavaScript/Vue antes da conclusão de implementações e antes de commits; escolha dos linters ainda ausentes depende de discussão prévia.
+- Mapa da aplicação em `ARCHITECTURE.md`, com responsabilidades de arquivos, fluxos, limites de escopo e contexto
+  histórico.
+- Registro cumulativo em `adrs/ADR-NNNN.md` com 30 decisões atômicas: 20 reconstruídas do histórico e dez definidas pelo
+  usuário para o desenvolvimento e a manutenção dos registros, incluindo a substituição da política inicial de
+  cobertura.
+- Consulta e atualização obrigatória dos ADRs pelos agentes, com formato, status e regras de substituição definidos em
+  `AGENTS.md`.
+- Regra de lint obrigatório para Markdown, Python e JavaScript/Vue antes da conclusão de implementações e antes de
+  commits; escolhas de ferramentas devem ser alinhadas previamente.
 - Reconstrução das mudanças históricas abaixo a partir dos seis commits disponíveis.
 
 ### Changed
 
-- Gate de cobertura definido exclusivamente por linhas, com mínimo de 85% por módulo; outras métricas não bloqueiam aprovação. ADR-0030 substitui ADR-0023.
-- Exceção pontual autorizada pelo usuário para publicar este lote exclusivamente documental, com cobertura da API abaixo da meta e ferramentas de lint ainda pendentes; as regras permanecem obrigatórias para os próximos trabalhos.
+- Dependências Python atualizadas, incluindo Flask 3.1, SQLAlchemy 2.1, Marshmallow 4 e OpenTelemetry 1.45;
+  dependências de pytest/Ruff separadas em `api/requirements-dev.txt`.
+- UI migrada para Vue 3, Vue Router 4, Vite e Vitest/Vue Test Utils 2; Bootstrap 4 e visual existente preservados.
+- Cobertura da UI passa a incluir inicialização e router, com threshold exclusivamente de linhas.
+- Docker usa Python 3.14.7, Node 24, instalação UI pelo lockfile e argumentos de build `VITE_*`.
+- Planos e especificações em `docs/` mantidos apenas localmente, com a pasta ignorada pelo Git.
+- Gate de cobertura definido exclusivamente por linhas, com mínimo de 85% por módulo; outras métricas não bloqueiam
+  aprovação. ADR-0030 substitui ADR-0023.
+- Exceção pontual autorizada pelo usuário para publicar o commit documental anterior, com cobertura da API abaixo
+  da meta e ferramentas de lint então pendentes; a exceção não se aplica à atualização atual da stack.
+
+### Fixed
+
+- Configuração de lint dos testes JavaScript passa a reconhecer os globais da suíte Vitest.
+- URLs do build público da UI usam endereços acessíveis pelo navegador, evitando o hostname interno `api` como padrão.
+
+### Removed
+
+- Vue CLI, Jest, compilador Vue 2, BootstrapVue e IconsPlugin da cadeia de build/runtime da UI.
 
 ## Histórico reconstruído (sem releases identificados)
 
@@ -61,7 +91,8 @@ Fonte: `b459944`.
 
 #### Fixed
 
-- Descrição de origem no README: o projeto passou a ser descrito como inaugurado com a API Flask, sem afirmar uma migração de Ruby não demonstrada pelo histórico disponível.
+- Descrição de origem no README: o projeto passou a ser descrito como inaugurado com a API Flask, sem afirmar uma
+  migração de Ruby não demonstrada pelo histórico disponível.
 
 Fontes: `291a07f`, `c4f0f3d`, `ec76ee3` e `329763c`.
 

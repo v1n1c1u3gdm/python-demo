@@ -1,4 +1,5 @@
 from extensions import db
+
 from .base import SerializerMixin
 
 

@@ -4,7 +4,6 @@ from flask import Blueprint, current_app
 
 from .utils import to_json
 
-
 bp = Blueprint("health", __name__)
 
 

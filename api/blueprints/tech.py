@@ -2,7 +2,6 @@ from flask import Blueprint, make_response
 
 from services.tech_report import TechReport
 
-
 bp = Blueprint("tech", __name__)
 
 

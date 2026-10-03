@@ -6,8 +6,8 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import Author
 from schemas import AuthorSchema
-from .utils import error_response, not_found, to_json
 
+from .utils import error_response, not_found, to_json
 
 bp = Blueprint("authors", __name__, url_prefix="/authors")
 

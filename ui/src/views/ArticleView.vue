@@ -1,9 +1,24 @@
 <template>
   <SiteLayout>
     <template #main-left>
-      <div v-if="isLoading" class="state state--info">Carregando artigo...</div>
-      <div v-else-if="error" class="state state--error">{{ error }}</div>
-      <div v-else-if="!article" class="state">Selecione um artigo para visualizar.</div>
+      <div
+        v-if="isLoading"
+        class="state state--info"
+      >
+        Carregando artigo...
+      </div>
+      <div
+        v-else-if="error"
+        class="state state--error"
+      >
+        {{ error }}
+      </div>
+      <div
+        v-else-if="!article"
+        class="state"
+      >
+        Selecione um artigo para visualizar.
+      </div>
 
       <template v-else>
         <figure class="hero">
@@ -13,14 +28,14 @@
             loading="eager"
             :srcset="article.heroSrcset || null"
             :sizes="article.heroSizes || null"
-          />
+          >
           <div class="hero-overlay">
             <h2 class="hero-title">
               <router-link to="/">
                 {{ hero.title }}
               </router-link>
             </h2>
-            <hr class="divider" />
+            <hr class="divider">
           </div>
           <span class="sr-only">{{ article.title }}</span>
         </figure>
@@ -47,18 +62,39 @@
     </template>
 
     <template #main-right>
-      <div v-if="isLoading" class="state state--info">Carregando artigo...</div>
-      <div v-else-if="error" class="state state--error">{{ error }}</div>
-      <div v-else-if="!article" class="state">Selecione um artigo para visualizar.</div>
+      <div
+        v-if="isLoading"
+        class="state state--info"
+      >
+        Carregando artigo...
+      </div>
+      <div
+        v-else-if="error"
+        class="state state--error"
+      >
+        {{ error }}
+      </div>
+      <div
+        v-else-if="!article"
+        class="state"
+      >
+        Selecione um artigo para visualizar.
+      </div>
 
-      <article v-else class="post">
+      <article
+        v-else
+        class="post"
+      >
         <div class="post__entry">
           <p
             v-for="(paragraph, index) in article.content"
             :key="`paragraph-${index}`"
             v-html="paragraph"
           />
-          <p v-if="!article.content.length" class="post__placeholder">
+          <p
+            v-if="!article.content.length"
+            class="post__placeholder"
+          >
             Este artigo ainda não possui conteúdo disponível para exibição.
           </p>
         </div>
@@ -116,13 +152,13 @@ export default {
       ]
     }
   },
-  created() {
-    this.loadArticle()
-  },
   watch: {
     '$route.params.slug'() {
       this.loadArticle()
     }
+  },
+  created() {
+    this.loadArticle()
   },
   methods: {
     async loadArticle() {

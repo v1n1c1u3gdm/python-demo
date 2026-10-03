@@ -7,8 +7,8 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import Article, Author
 from schemas import ArticleSchema
-from .utils import error_response, to_json
 
+from .utils import error_response, to_json
 
 bp = Blueprint("articles", __name__, url_prefix="/articles")
 

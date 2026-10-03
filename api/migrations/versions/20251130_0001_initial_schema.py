@@ -1,7 +1,7 @@
 """Initial schema for authors, socials, articles, seed_runs"""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "20251130_0001"

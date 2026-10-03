@@ -1,6 +1,9 @@
 <template>
   <div :class="['layout-wrapper js-container', { 'is-menu': isMenuOpen }]">
-    <nav class="menu" aria-label="Menu lateral">
+    <nav
+      class="menu"
+      aria-label="Menu lateral"
+    >
       <ul class="navbar__menu">
         <li
           v-for="link in navLinks"
@@ -11,7 +14,7 @@
             v-if="link.routeName"
             :to="{ name: link.routeName }"
             class="navbar__link"
-            @click.native="handleMenuLinkClick"
+            @click="handleMenuLinkClick"
           >
             {{ link.label }}
           </router-link>
@@ -31,7 +34,7 @@
 
     <div class="content">
       <header class="top">
-        <div class="top__item"></div>
+        <div class="top__item" />
         <div class="top__item top__item--right">
           <button
             type="button"
@@ -58,7 +61,9 @@
             <slot name="main-right" />
 
             <footer class="footer">
-              <div class="footer__copyright">Do primeiro e único... VGDM ®</div>
+              <div class="footer__copyright">
+                Do primeiro e único... VGDM ®
+              </div>
               <div class="footer__social">
                 <SocialsView />
               </div>
@@ -92,6 +97,17 @@ export default {
       ]
     }
   },
+  watch: {
+    isMenuOpen(value) {
+      this.setBodyScrollState(value)
+    }
+  },
+  mounted() {
+    this.setBodyScrollState(this.isMenuOpen)
+  },
+  beforeUnmount() {
+    this.setBodyScrollState(false)
+  },
   methods: {
     handleMenuToggle() {
       this.isMenuOpen = !this.isMenuOpen
@@ -109,17 +125,6 @@ export default {
       if (typeof document === 'undefined') return
       document.body.classList.toggle('no-scroll', active)
     }
-  },
-  watch: {
-    isMenuOpen(value) {
-      this.setBodyScrollState(value)
-    }
-  },
-  mounted() {
-    this.setBodyScrollState(this.isMenuOpen)
-  },
-  beforeDestroy() {
-    this.setBodyScrollState(false)
   }
 }
 </script>
@@ -412,4 +417,3 @@ export default {
   }
 }
 </style>
-
