@@ -1,21 +1,20 @@
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { mount } from '../../support/mount.js'
 import flushPromises from 'flush-promises'
 import AboutView from '@/views/AboutView.vue'
 import { fetchAuthors, fetchArticlesCountByAuthor } from '@/services/authorsService'
 import { makeAuthor } from '../factories/authors'
 
-jest.mock('@/components/SiteLayout.vue', () => ({
-  name: 'SiteLayout',
-  render(h) {
-    const left = this.$scopedSlots['main-left'] ? this.$scopedSlots['main-left']() : null
-    const right = this.$scopedSlots['main-right'] ? this.$scopedSlots['main-right']() : null
-    return h('div', { class: 'site-layout-stub' }, [left, right])
+vi.mock('@/components/SiteLayout.vue', () => ({
+  default: {
+    name: 'SiteLayout',
+    template: '<div class="site-layout-stub"><slot name="main-left"/><slot name="main-right"/></div>'
   }
 }))
 
-jest.mock('@/services/authorsService', () => ({
-  fetchAuthors: jest.fn(),
-  fetchArticlesCountByAuthor: jest.fn()
+vi.mock('@/services/authorsService', () => ({
+  fetchAuthors: vi.fn(),
+  fetchArticlesCountByAuthor: vi.fn()
 }))
 
 const RouterLinkStub = {
@@ -68,4 +67,3 @@ describe('AboutView', () => {
     expect(wrapper.text()).toContain('Não foi possível carregar os dados do autor')
   })
 })
-

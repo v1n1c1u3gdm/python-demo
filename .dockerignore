@@ -1,0 +1,16 @@
+.git
+.superpowers
+docs
+node_modules
+**/node_modules
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage*
+**/coverage
+**/htmlcov
+**/dist
+api/logs
+data/coverage

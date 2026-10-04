@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import Author, Social
 from schemas import SocialSchema
-from .utils import error_response, to_json
 
+from .utils import error_response, to_json
 
 bp = Blueprint("socials", __name__, url_prefix="/socials")
 

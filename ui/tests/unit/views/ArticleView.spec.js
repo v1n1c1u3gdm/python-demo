@@ -1,22 +1,21 @@
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { mount } from '../../support/mount.js'
 import flushPromises from 'flush-promises'
 import ArticleView from '@/views/ArticleView.vue'
 import { fetchArticles, fetchArticleBySlug, buildArticleUrl } from '@/services/articlesService'
 import { makeArticle } from '../factories/articles'
 
-jest.mock('@/components/SiteLayout.vue', () => ({
-  name: 'SiteLayout',
-  render(h) {
-    const left = this.$scopedSlots['main-left'] ? this.$scopedSlots['main-left']() : null
-    const right = this.$scopedSlots['main-right'] ? this.$scopedSlots['main-right']() : null
-    return h('div', { class: 'site-layout-stub' }, [left, right])
+vi.mock('@/components/SiteLayout.vue', () => ({
+  default: {
+    name: 'SiteLayout',
+    template: '<div class="site-layout-stub"><slot name="main-left"/><slot name="main-right"/></div>'
   }
 }))
 
-jest.mock('@/services/articlesService', () => ({
-  fetchArticles: jest.fn(),
-  fetchArticleBySlug: jest.fn(),
-  buildArticleUrl: jest.fn(() => 'https://example.com/article')
+vi.mock('@/services/articlesService', () => ({
+  fetchArticles: vi.fn(),
+  fetchArticleBySlug: vi.fn(),
+  buildArticleUrl: vi.fn(() => 'https://example.com/article')
 }))
 
 const RouterLinkStub = {
@@ -93,4 +92,3 @@ describe('ArticleView', () => {
     expect(fetchArticleBySlug).toHaveBeenCalledWith('second')
   })
 })
-

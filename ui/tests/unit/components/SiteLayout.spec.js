@@ -1,10 +1,11 @@
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { mount } from '../../support/mount.js'
 import SiteLayout from '@/components/SiteLayout.vue'
 
-jest.mock('@/views/SocialsView.vue', () => ({
-  name: 'SocialsView',
-  render(h) {
-    return h('div', { class: 'socials-stub' }, ['Socials'])
+vi.mock('@/views/SocialsView.vue', () => ({
+  default: {
+    name: 'SocialsView',
+    template: '<div class="socials-stub">Socials</div>'
   }
 }))
 
@@ -36,9 +37,9 @@ describe('SiteLayout', () => {
     const navItems = wrapper.findAll('.navbar__menu li')
 
     expect(navItems.length).toBe(wrapper.vm.navLinks.length)
-    expect(navItems.at(0).classes()).toContain('active')
+    expect(navItems[0].classes()).toContain('active')
 
-    wrapper.destroy()
+    wrapper.unmount()
   })
 
   it('toggles menu visibility and body scroll state', async () => {
@@ -53,7 +54,6 @@ describe('SiteLayout', () => {
     expect(wrapper.classes()).not.toContain('is-menu')
     expect(document.body.classList.contains('no-scroll')).toBe(false)
 
-    wrapper.destroy()
+    wrapper.unmount()
   })
 })
-

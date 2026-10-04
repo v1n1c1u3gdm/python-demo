@@ -1,9 +1,24 @@
 <template>
   <SiteLayout>
     <template #main-left>
-      <div v-if="isLoading" class="state state--info">Carregando dados do autor...</div>
-      <div v-else-if="error" class="state state--error">{{ error }}</div>
-      <div v-else-if="!author" class="state">Nenhum autor disponível.</div>
+      <div
+        v-if="isLoading"
+        class="state state--info"
+      >
+        Carregando dados do autor...
+      </div>
+      <div
+        v-else-if="error"
+        class="state state--error"
+      >
+        {{ error }}
+      </div>
+      <div
+        v-else-if="!author"
+        class="state"
+      >
+        Nenhum autor disponível.
+      </div>
 
       <template v-else>
         <figure class="hero">
@@ -13,15 +28,17 @@
             loading="eager"
             :srcset="heroSrcset || null"
             :sizes="heroSizes"
-          />
+          >
           <div class="hero-overlay">
             <h2 class="hero-title">
               <router-link to="/">
                 {{ hero.title }}
               </router-link>
             </h2>
-            <hr class="divider" />
-            <p class="hero-subtitle">{{ articlesCountLabel }}</p>
+            <hr class="divider">
+            <p class="hero-subtitle">
+              {{ articlesCountLabel }}
+            </p>
           </div>
           <span class="sr-only">{{ author.name }}</span>
         </figure>
@@ -37,18 +54,36 @@
     </template>
 
     <template #main-right>
-      <div v-if="isLoading" class="state state--info">Carregando dados do autor...</div>
-      <div v-else-if="error" class="state state--error">{{ error }}</div>
-      <div v-else-if="!author" class="state">Nenhum autor disponível.</div>
+      <div
+        v-if="isLoading"
+        class="state state--info"
+      >
+        Carregando dados do autor...
+      </div>
+      <div
+        v-else-if="error"
+        class="state state--error"
+      >
+        {{ error }}
+      </div>
+      <div
+        v-else-if="!author"
+        class="state"
+      >
+        Nenhum autor disponível.
+      </div>
 
-      <article v-else class="post">
+      <article
+        v-else
+        class="post"
+      >
         <div class="post__entry">
           <figure class="about-photo">
             <img
               :src="professionalPhoto"
               alt="Retrato profissional de Vinicius Menezes"
               loading="lazy"
-            />
+            >
           </figure>
           <div class="text-column">
             <p
@@ -56,7 +91,10 @@
               :key="`bio-${index}`"
               v-html="paragraph"
             />
-            <p v-if="!bioParagraphs.length" class="post__placeholder">
+            <p
+              v-if="!bioParagraphs.length"
+              class="post__placeholder"
+            >
               Nenhuma biografia cadastrada para este autor.
             </p>
           </div>

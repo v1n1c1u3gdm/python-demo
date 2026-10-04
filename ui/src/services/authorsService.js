@@ -1,9 +1,9 @@
 const DEFAULT_AUTHORS_URL = 'http://localhost:3000/authors'
 const DEFAULT_ARTICLES_COUNT_URL = 'http://localhost:3000/articles/count_by_author'
 
-const AUTHORS_ENDPOINT = normalizeUrl(process.env.VUE_APP_AUTHORS_URL || DEFAULT_AUTHORS_URL)
+const AUTHORS_ENDPOINT = normalizeUrl(import.meta.env.VITE_AUTHORS_URL || DEFAULT_AUTHORS_URL)
 const ARTICLES_COUNT_ENDPOINT = normalizeUrl(
-  process.env.VUE_APP_ARTICLES_COUNT_URL || DEFAULT_ARTICLES_COUNT_URL
+  import.meta.env.VITE_ARTICLES_COUNT_URL || DEFAULT_ARTICLES_COUNT_URL
 )
 
 let authorsCache = null
@@ -38,7 +38,7 @@ async function requestJson(url, fetchOptions = {}) {
       } else if (payload?.message) {
         errorDetail = payload.message
       }
-    } catch (_) {
+    } catch {
       // noop - mantém detalhe padrão
     }
 

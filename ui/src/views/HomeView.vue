@@ -2,24 +2,41 @@
   <SiteLayout>
     <template #main-left>
       <figure class="hero">
-        <img :src="hero.image" :alt="hero.alt" loading="eager" />
+        <img
+          :src="hero.image"
+          :alt="hero.alt"
+          loading="eager"
+        >
         <div class="hero-overlay">
           <h1>{{ hero.title }}</h1>
-          <hr class="divider" />
-          <p class="hero-subtitle">{{ hero.subtitle }}</p>
+          <hr class="divider">
+          <p class="hero-subtitle">
+            {{ hero.subtitle }}
+          </p>
         </div>
       </figure>
     </template>
 
     <template #main-right>
       <div class="feed">
-        <p v-if="isLoading" class="feed__state">Carregando artigos...</p>
+        <p
+          v-if="isLoading"
+          class="feed__state"
+        >
+          Carregando artigos...
+        </p>
 
-        <p v-else-if="error" class="feed__state feed__state--error">
+        <p
+          v-else-if="error"
+          class="feed__state feed__state--error"
+        >
           {{ error }}
         </p>
 
-        <p v-else-if="!posts.length" class="feed__state">
+        <p
+          v-else-if="!posts.length"
+          class="feed__state"
+        >
           Nenhum artigo encontrado.
         </p>
 
@@ -51,8 +68,8 @@
               class="btn btn--icon"
               type="button"
               :disabled="currentPage === 1"
-              @click="goToPage(currentPage - 1)"
               aria-label="Página anterior"
+              @click="goToPage(currentPage - 1)"
             >
               <span aria-hidden="true">‹</span>
             </button>
@@ -65,8 +82,8 @@
               class="btn btn--icon"
               type="button"
               :disabled="currentPage === totalPages"
-              @click="goToPage(currentPage + 1)"
               aria-label="Próxima página"
+              @click="goToPage(currentPage + 1)"
             >
               <span aria-hidden="true">›</span>
             </button>
@@ -102,9 +119,6 @@ export default {
       error: null
     }
   },
-  created() {
-    this.loadArticles()
-  },
   computed: {
     paginatedPosts() {
       if (!this.posts.length) return []
@@ -115,6 +129,9 @@ export default {
       if (!this.posts.length) return 1
       return Math.max(1, Math.ceil(this.posts.length / this.perPage))
     }
+  },
+  created() {
+    this.loadArticles()
   },
   methods: {
     async loadArticles() {

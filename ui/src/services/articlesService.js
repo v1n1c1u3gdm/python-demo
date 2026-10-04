@@ -1,9 +1,9 @@
 const DEFAULT_ARTICLES_URL = 'http://localhost:3000/articles'
 const DEFAULT_ARTICLE_PUBLIC_BASE_URL = 'https://viniciusmenezes.com'
 
-const ARTICLES_ENDPOINT = normalizeArticlesUrl(process.env.VUE_APP_ARTICLES_URL || DEFAULT_ARTICLES_URL)
+const ARTICLES_ENDPOINT = normalizeArticlesUrl(import.meta.env.VITE_ARTICLES_URL || DEFAULT_ARTICLES_URL)
 const ARTICLE_PUBLIC_BASE_URL = normalizePublicBaseUrl(
-  process.env.VUE_APP_ARTICLE_PUBLIC_BASE_URL || DEFAULT_ARTICLE_PUBLIC_BASE_URL
+  import.meta.env.VITE_ARTICLE_PUBLIC_BASE_URL || DEFAULT_ARTICLE_PUBLIC_BASE_URL
 )
 
 let articlesCache = null
@@ -37,7 +37,7 @@ async function request(url, fetchOptions = {}) {
       } else if (payload?.message) {
         errorDetail = payload.message
       }
-    } catch (_) {
+    } catch {
       // noop: fallback to status text
     }
 

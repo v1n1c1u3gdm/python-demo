@@ -2,7 +2,6 @@ from flask import Blueprint, current_app
 
 from observability import MetricsFormatter, ObservabilityMetrics
 
-
 bp = Blueprint("metrics", __name__)
 
 

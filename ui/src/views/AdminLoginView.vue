@@ -18,8 +18,16 @@
         </header>
 
         <article class="admin-login__card">
-          <form v-if="!isAuthenticated" class="admin-login__form" @submit.prevent="handleSubmit" autocomplete="off">
-            <label class="admin-login__label" for="admin-user">Usuário</label>
+          <form
+            v-if="!isAuthenticated"
+            class="admin-login__form"
+            autocomplete="off"
+            @submit.prevent="handleSubmit"
+          >
+            <label
+              class="admin-login__label"
+              for="admin-user"
+            >Usuário</label>
             <input
               id="admin-user"
               v-model.trim="credentials.username"
@@ -27,9 +35,12 @@
               required
               placeholder="admin"
               autocomplete="off"
-            />
+            >
 
-            <label class="admin-login__label" for="admin-password">Senha</label>
+            <label
+              class="admin-login__label"
+              for="admin-password"
+            >Senha</label>
             <input
               id="admin-password"
               v-model="credentials.password"
@@ -37,31 +48,59 @@
               required
               placeholder="••••••••"
               autocomplete="off"
-            />
+            >
 
-            <button class="btn admin-login__submit" type="submit" :disabled="isSubmitting">
+            <button
+              class="btn admin-login__submit"
+              type="submit"
+              :disabled="isSubmitting"
+            >
               {{ isSubmitting ? 'Autenticando...' : 'Entrar' }}
             </button>
           </form>
 
-          <div v-else class="admin-login__session">
+          <div
+            v-else
+            class="admin-login__session"
+          >
             <p class="admin-login__session-title">
               Autenticado como <strong>{{ session.username }}</strong>
             </p>
-            <p class="admin-login__session-roles">Roles: {{ session.roles.join(', ') || '—' }}</p>
+            <p class="admin-login__session-roles">
+              Roles: {{ session.roles.join(', ') || '—' }}
+            </p>
 
             <div class="admin-login__session-actions">
-              <button class="btn" type="button" :disabled="isProfileLoading" @click="loadProfile">
+              <button
+                class="btn"
+                type="button"
+                :disabled="isProfileLoading"
+                @click="loadProfile"
+              >
                 {{ isProfileLoading ? 'Sincronizando...' : 'Atualizar perfil' }}
               </button>
-              <button class="btn btn--link" type="button" @click="handleLogout">Sair</button>
+              <button
+                class="btn btn--link"
+                type="button"
+                @click="handleLogout"
+              >
+                Sair
+              </button>
             </div>
           </div>
         </article>
 
-        <p v-if="errorMessage" class="admin-login__error">{{ errorMessage }}</p>
+        <p
+          v-if="errorMessage"
+          class="admin-login__error"
+        >
+          {{ errorMessage }}
+        </p>
 
-        <article v-if="profile" class="admin-profile">
+        <article
+          v-if="profile"
+          class="admin-profile"
+        >
           <header>
             <h3>Perfil do Keycloak</h3>
           </header>

@@ -146,6 +146,12 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# Local plans and specifications
+/docs/
+
+# Root Markdown tooling dependencies
+/node_modules/
+
 # mypy
 .mypy_cache/
 .dmypy.json

@@ -1,4 +1,3 @@
-import logging
 import time
 from pathlib import Path
 
@@ -10,13 +9,13 @@ from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import models  # noqa: F401  # Ensure models are registered before migrations
+from blueprints import register_blueprints
 from config import get_config
 from extensions import db, migrate
 from logging_config import configure_logging
-from observability import MetricsFormatter, ObservabilityMetrics
-from blueprints import register_blueprints
+from observability import ObservabilityMetrics
 from seeds import bootstrap_seed_data
-import models  # noqa: F401  # Ensure models are registered before migrations
 from services.keycloak_client import init_keycloak_client
 
 

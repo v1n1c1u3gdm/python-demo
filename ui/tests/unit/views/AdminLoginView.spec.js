@@ -1,4 +1,5 @@
-import { mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '../../support/mount.js'
 import flushPromises from 'flush-promises'
 
 import AdminLoginView from '@/views/AdminLoginView.vue'
@@ -10,22 +11,19 @@ import {
   clearSession
 } from '@/services/authService'
 
-jest.mock('@/components/SiteLayout.vue', () => ({
-  name: 'SiteLayout',
-  render(h) {
-    const slots = []
-    if (this.$scopedSlots['main-left']) slots.push(this.$scopedSlots['main-left']())
-    if (this.$scopedSlots['main-right']) slots.push(this.$scopedSlots['main-right']())
-    return h('div', { class: 'site-layout-stub' }, slots)
+vi.mock('@/components/SiteLayout.vue', () => ({
+  default: {
+    name: 'SiteLayout',
+    template: '<div class="site-layout-stub"><slot name="main-left"/><slot name="main-right"/></div>'
   }
 }))
 
-jest.mock('@/services/authService', () => ({
-  login: jest.fn(),
-  persistSession: jest.fn(),
-  getStoredSession: jest.fn(),
-  fetchAdminProfile: jest.fn(),
-  clearSession: jest.fn()
+vi.mock('@/services/authService', () => ({
+  login: vi.fn(),
+  persistSession: vi.fn(),
+  getStoredSession: vi.fn(),
+  fetchAdminProfile: vi.fn(),
+  clearSession: vi.fn()
 }))
 
 const RouterLinkStub = {
@@ -36,7 +34,7 @@ const RouterLinkStub = {
 
 describe('AdminLoginView', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     getStoredSession.mockReturnValue(null)
   })
 
@@ -116,4 +114,3 @@ describe('AdminLoginView', () => {
     expect(wrapper.find('.admin-login__error').text()).toContain('perfil indisponível')
   })
 })
-

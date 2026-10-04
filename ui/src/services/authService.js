@@ -1,5 +1,5 @@
 const DEFAULT_API_BASE_URL = 'http://localhost:3000'
-const API_BASE_URL = normalizeBaseUrl(process.env.VUE_APP_API_BASE_URL || DEFAULT_API_BASE_URL)
+const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL)
 const SESSION_STORAGE_KEY = 'python-demo-admin-session'
 
 export const runtimeGuards = {
@@ -30,7 +30,7 @@ async function httpRequest(path, options = {}) {
       } else if (payload?.message) {
         detail = payload.message
       }
-    } catch (error) {
+    } catch {
       // ignore json parsing errors, fall back to status text
     }
     throw new Error(detail)
@@ -69,7 +69,7 @@ export function getStoredSession() {
   if (!stored) return null
   try {
     return JSON.parse(stored)
-  } catch (error) {
+  } catch {
     clearSession()
     return null
   }

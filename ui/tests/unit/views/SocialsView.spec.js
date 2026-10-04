@@ -1,11 +1,12 @@
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { mount } from '../../support/mount.js'
 import flushPromises from 'flush-promises'
 import SocialsView from '@/views/SocialsView.vue'
 import { fetchSocials } from '@/services/socialsService'
 import { makeSocial } from '../factories/socials'
 
-jest.mock('@/services/socialsService', () => ({
-  fetchSocials: jest.fn()
+vi.mock('@/services/socialsService', () => ({
+  fetchSocials: vi.fn()
 }))
 
 describe('SocialsView', () => {
