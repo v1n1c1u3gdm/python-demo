@@ -74,33 +74,37 @@ versão do Fedora, arquitetura de CPU, espaço em disco, domínio e HTTPS; confi
 
 ## Fase 1 — Inicialização segura da aplicação
 
-**Status:** 1A concluída; 1B pendente.
+**Status:** 1A e 1B concluídas localmente; produção não implantada.
 
 **Escopo 1A (concluído):** separar bootstrap de produção do carregamento de cada worker: executar migrations e seeds uma
 vez, antes de iniciar workers; remover efeitos de banco da criação da aplicação fora de `TESTING`, preservando o modo
 de testes.
 
-**Escopo 1B (pendente):** configurar autenticação Keycloak para produção e preparar endpoints de leitura pública e
-escrita autenticada.
+**Escopo 1B (concluído):** exigir configuração explícita de produção e validar JWT RS256, issuer e audience; manter
+leituras públicas, restringir alterações de autores/perfis sociais/relatório técnico a admin e permitir CRUD de artigos
+por autor vinculado ou admin. Vincular identidade Keycloak privada a autor por decisão admin.
 
 **Dependências:** baseline da Fase 0; bootstrap 1A registrado no [ADR-0048](adrs/ADR-0048.md), que substitui o
-[ADR-0010](adrs/ADR-0010.md). Autorização e Keycloak de produção continuam sujeitos a alinhamento e ADR antes da
-implementação.
+[ADR-0010](adrs/ADR-0010.md). A política 1B e as decisões atômicas estão registradas nos
+[ADR-0049](adrs/ADR-0049.md)–[ADR-0052](adrs/ADR-0052.md).
 
 **Critérios 1A verificados:** inicialização com banco MySQL vazio cria o schema e executa seeds uma única vez antes dos
 quatro workers; repetição preserva edições, revision e um `SeedRun`; falha do init bloqueia a API nova e não revela a
 credencial fictícia nos logs; reinício da API não recria o init. A validação Compose é opt-in por
 `RUN_COMPOSE_INTEGRATION=1`.
 
-**Critérios 1B pendentes:** teste de produção sem segredo/config obrigatória falha com diagnóstico seguro; endpoints
-obedecem à política de leitura/escrita acordada.
+**Critérios 1B:** testes comprovam configuração obrigatória de produção, leituras públicas, alterações administrativas,
+CRUD do próprio autor, bloqueio de autor não vinculado e de acesso cruzado, audience inválida rejeitada e vínculo de
+identidade não exposto nos serializers públicos. A integração opt-in usa projeto Compose e volumes exclusivos; a
+validação de migration MySQL também deve comprovar preservação de dados existentes.
 
 **Entrega 1A:** o serviço Compose `api-init` aguarda o banco saudável e executa `flask bootstrap-db`; a API aguarda
 sucesso antes de iniciar. Consulte [ADR-0048](adrs/ADR-0048.md), [README](README.md) para os procedimentos operacionais
 e a especificação local `docs/superpowers/specs/2026-10-03-single-bootstrap-design.md`.
 
-**Decisões pendentes:** papéis e escopo de autorização por recurso; configuração e gestão externa de segredos Keycloak.
-Não inferir que login existente protege os CRUDs.
+**Decisões pendentes:** integração de deploy, mecanismo de segredos de runtime e operação de produção pertencem às
+Fases 5–6. Embora a API exija credenciais explícitas, implantação em produção permanece pendente e a UI ainda renderiza
+HTML de artigos com `v-html`; sanitização da allowlist na Fase 7 é bloqueadora antes de expor conteúdo não confiável.
 
 ## Fase 2 — Saúde e observabilidade operacional
 

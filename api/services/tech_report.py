@@ -9,6 +9,7 @@ from typing import Dict, Iterable
 
 import flask
 from flask import current_app
+from sqlalchemy.engine import make_url
 
 from extensions import db
 
@@ -148,6 +149,7 @@ class TechReport:
 
     def _database_info(self) -> Dict[str, str]:
         uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        safe_uri = self._redact_database_uri(uri)
         try:
             engine = db.get_engine()
             params = engine.url
@@ -158,10 +160,10 @@ class TechReport:
                 "Port": params.port,
                 "Username": params.username,
                 "Pool size": engine.pool.size(),
-                "URI": uri,
+                "URI": safe_uri,
             }
-        except Exception as exc:
-            return {"Status": f"indisponível: {exc}", "URI": uri}
+        except Exception:
+            return {"Status": "indisponível", "URI": safe_uri}
 
     def _config_info(self) -> Dict[str, str]:
         cfg = current_app.config
@@ -175,9 +177,26 @@ class TechReport:
     def _sanitized_env(self) -> Iterable:
         entries = []
         for key, value in sorted(self.env.items()):
-            display = "[FILTERED]" if any(token in key.upper() for token in SENSITIVE_ENV_PATTERN) else value
+            sensitive = key.upper() == "DATABASE_URL" or any(
+                token in key.upper() for token in SENSITIVE_ENV_PATTERN
+            )
+            display = "[FILTERED]" if sensitive else value
             entries.append((key, display))
         return entries
+
+    @staticmethod
+    def _redact_database_uri(uri: str) -> str:
+        try:
+            parsed = make_url(uri)
+            safe_query = {
+                key: "[FILTERED]"
+                if any(token in key.upper() for token in SENSITIVE_ENV_PATTERN)
+                else value
+                for key, value in parsed.query.items()
+            }
+            return parsed.set(query=safe_query).render_as_string(hide_password=True)
+        except Exception:
+            return "[configured]" if uri else ""
 
     def _installed_packages(self):
         packages = []
@@ -227,4 +246,3 @@ class TechReport:
             return rss_mb
         except Exception:
             return 0.0
-

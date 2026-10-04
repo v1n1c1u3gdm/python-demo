@@ -13,6 +13,12 @@ class Author(SerializerMixin, TimestampMixin, db.Model):
     public_key = db.Column(db.Text, nullable=False)
     bio = db.Column(db.Text, nullable=False)
 
+    identity = db.relationship(
+        "AuthorIdentity",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
     socials = db.relationship(
         "Social",
         back_populates="author",

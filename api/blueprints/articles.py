@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from marshmallow import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -7,6 +7,12 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import Article, Author
 from schemas import ArticleSchema
+from services.authorization import (
+    AuthorizationError,
+    get_bearer_claims,
+    has_role,
+    require_author_identity,
+)
 
 from .utils import error_response, to_json
 
@@ -40,7 +46,13 @@ def get_article(article_id: int):
 
 @bp.post("")
 def create_article():
-    payload = _load_article_payload()
+    is_admin, author_id = _article_writer()
+    payload = _load_article_payload(
+        allow_missing_author=not is_admin,
+        reject_author_id=not is_admin,
+    )
+    if not is_admin:
+        payload["author_id"] = author_id
     _ensure_author_exists(payload["author_id"])
 
     article = Article(**payload)
@@ -51,10 +63,15 @@ def create_article():
 
 @bp.patch("/<int:article_id>")
 def update_article(article_id: int):
-    payload = _load_article_payload(partial=True)
+    is_admin, author_id = _article_writer()
     article = Article.query.get(article_id)
     if not article:
         return error_response("Artigo não encontrado.", status=404)
+
+    if not is_admin and article.author_id != author_id:
+        raise AuthorizationError("Insufficient permissions.", 403)
+
+    payload = _load_article_payload(partial=True, reject_author_id=not is_admin)
 
     if "author_id" in payload:
         _ensure_author_exists(payload["author_id"])
@@ -67,9 +84,13 @@ def update_article(article_id: int):
 
 @bp.delete("/<int:article_id>")
 def delete_article(article_id: int):
+    is_admin, author_id = _article_writer()
     article = Article.query.get(article_id)
     if not article:
         return error_response("Artigo não encontrado.", status=404)
+
+    if not is_admin and article.author_id != author_id:
+        raise AuthorizationError("Insufficient permissions.", 403)
 
     db.session.delete(article)
     return _commit_and_respond({}, status=204)
@@ -100,13 +121,33 @@ def count_by_author():
     return to_json(payload)
 
 
-def _load_article_payload(partial: bool = False):
-    body = request.get_json(silent=True) or {}
-    if "article" not in body:
+def _load_article_payload(
+    partial: bool = False,
+    *,
+    allow_missing_author: bool = False,
+    reject_author_id: bool = False,
+):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
         raise ValidationError({"article": ["é obrigatório"]})
+    article_data = body.get("article")
+    if not isinstance(article_data, dict):
+        raise ValidationError({"article": ["é obrigatório"]})
+    if reject_author_id and "author_id" in article_data:
+        raise ValidationError({"author_id": ["não pode ser informado pelo autor"]})
 
-    schema = ArticleSchema(partial=partial)
-    return schema.load(body["article"])
+    schema_partial = partial or (("author_id",) if allow_missing_author else False)
+    schema = ArticleSchema(partial=schema_partial)
+    return schema.load(article_data)
+
+
+def _article_writer() -> tuple[bool, int | None]:
+    claims = get_bearer_claims()
+    admin_role = current_app.config.get("KEYCLOAK_ADMIN_ROLE", "admin")
+    if has_role(claims, admin_role):
+        return True, None
+    _, author_id = require_author_identity()
+    return False, author_id
 
 
 def _ensure_author_exists(author_id: int):
@@ -127,4 +168,3 @@ def _commit_and_respond(payload, status=200):
         if "slug" in detail:
             return error_response("Slug has already been taken")
         return error_response("Não foi possível salvar o artigo.")
-

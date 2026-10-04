@@ -114,7 +114,40 @@ seguros.
 | `KEYCLOAK_REALM` | `python-demo` | Realm importado a partir de `keycloak/realm-python-demo.json`. |
 | `KEYCLOAK_CLIENT_ID` | `python-demo-api` | Client confidencial usado no fluxo de senha. |
 | `KEYCLOAK_CLIENT_SECRET` | `python-demo-api-secret` | Segredo do client confidencial. |
+| `KEYCLOAK_ISSUER` | deriva da URL local | Issuer exato esperado no token; em produção deve ser HTTPS e corresponder ao `iss`. A API precisa alcançar discovery/JWKS anunciados. |
+| `KEYCLOAK_AUDIENCE` | `python-demo-api` | Audience que o access token deve conter. |
 | `KEYCLOAK_ADMIN_ROLE` | `admin` | Papel necessário para acessar `/admin/profile`. |
+| `KEYCLOAK_AUTHOR_ROLE` | `author` | Papel de autor para escrita nos próprios artigos, após vínculo privado. |
+
+### Vínculo de autor e configuração de produção (Fase 1B)
+
+Em produção, `FLASK_ENV=production` requer `DATABASE_URL`, `KEYCLOAK_BASE_URL`, `KEYCLOAK_ISSUER`, `KEYCLOAK_REALM`,
+`KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` e `KEYCLOAK_AUDIENCE`, sem credenciais demonstrativas. Papéis
+`KEYCLOAK_ADMIN_ROLE` e `KEYCLOAK_AUTHOR_ROLE` são configuráveis e têm defaults. A imagem da API define
+`FLASK_ENV=production`; para executar fora dela, configure esse ambiente explicitamente. `KEYCLOAK_BASE_URL` é o
+endereço usado pela API no discovery/OpenID; `KEYCLOAK_ISSUER` deve corresponder exatamente ao `iss` do token,
+normalmente uma URL HTTPS pública. Os endpoints anunciados por
+discovery/JWKS precisam ser alcançáveis pela API. A integração isolada validou `KC_HOSTNAME` público junto de
+`KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`, com chamadas API→Keycloak pela rede interna e issuer HTTPS público; essa
+configuração de teste não é um deploy de produção.
+
+Tokens do cliente `python-demo-api` devem incluir essa audience no access token. Realm novo recebe o mapper do arquivo
+[`keycloak/realm-python-demo.json`](keycloak/realm-python-demo.json) durante a importação inicial. A importação não
+atualiza realms que já existem. Para um realm existente, no Admin Console abra **Clients → python-demo-api → Client
+scopes → python-demo-api-dedicated → Add mapper → By configuration → Audience**; defina `Included Client Audience` como
+`python-demo-api`, habilite inclusão no access token e deixe desabilitada no ID token. Salve o mapper sem apagar realm,
+usuários ou volume. Confirme que novo access token contém `aud: python-demo-api` antes de habilitar clientes.
+
+Leituras de conteúdo permanecem públicas. Escritas em autores, perfis sociais e relatório técnico exigem Bearer com
+papel `admin`; artigos aceitam admin ou papel `author` com identidade previamente vinculada. Um admin vincula um
+autor existente por `PUT /authors/{id}/identity` com `{ "identity": { "issuer": "<iss exato>", "sub": "<sub>" } }`;
+`DELETE` no mesmo recurso revoga o vínculo. Esses campos não aparecem no modelo público do autor. Autores não vinculados
+não podem escrever e não escolhem `author_id` no payload de artigo.
+
+Esta configuração não conclui a implantação de produção. O HTML de artigo ainda é exibido pela UI com `v-html`;
+sanitização por allowlist, incluindo conteúdo legado/importado, precisa anteceder exposição pública de conteúdo não
+confiável (Fase 7). Deploy, cofre de produção, observabilidade entre workers e hardening operacional continuam
+pendentes no [roadmap](ROADMAP.md).
 
 ### Autenticação Keycloak & área `/admin`
 

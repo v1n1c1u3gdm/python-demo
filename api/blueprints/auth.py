@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
+from services.authorization import AuthorizationError, require_admin
 from services.keycloak_client import KeycloakError, get_keycloak_client
 
 bp = Blueprint("auth", __name__)
@@ -9,9 +10,15 @@ bp = Blueprint("auth", __name__)
 
 @bp.post("/login")
 def login():
-    payload = request.get_json(silent=True) or {}
-    username = (payload.get("username") or "").strip()
-    password = payload.get("password") or ""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _json_error("username and password are required.", 400)
+
+    username_value = payload.get("username")
+    password = payload.get("password")
+    if not isinstance(username_value, str) or not isinstance(password, str):
+        return _json_error("username and password are required.", 400)
+    username = username_value.strip()
 
     if not username or not password:
         return _json_error("username and password are required.", 400)
@@ -19,13 +26,17 @@ def login():
     client = get_keycloak_client()
     try:
         tokens = client.exchange_password(username, password)
+        if not isinstance(tokens, dict):
+            raise KeycloakError("Invalid response from identity provider.")
         access_token = tokens.get("access_token")
-        if not access_token:
-            raise KeycloakError("Keycloak response does not include an access token.")
+        if not isinstance(access_token, str) or not access_token:
+            raise KeycloakError("Invalid response from identity provider.")
         claims = client.decode_token(access_token)
+        if not isinstance(claims, dict):
+            raise KeycloakError("Invalid response from identity provider.")
         roles = client.extract_roles(claims)
-    except KeycloakError as exc:
-        return _json_error(str(exc), 401)
+    except KeycloakError:
+        return _json_error("Authentication failed.", 401)
 
     return jsonify(
         {
@@ -41,19 +52,12 @@ def login():
 
 @bp.get("/admin/profile")
 def admin_profile():
-    token = _extract_bearer_token(request.headers.get("Authorization"))
-    if not token:
-        return _json_error("Authorization header with Bearer token is required.", 401)
+    try:
+        claims = require_admin()
+    except AuthorizationError as exc:
+        return _json_error(str(exc), exc.status_code)
 
     client = get_keycloak_client()
-    required_role = current_app.config.get("KEYCLOAK_ADMIN_ROLE", "admin")
-
-    try:
-        claims = client.require_roles(token, [required_role])
-    except KeycloakError as exc:
-        message = str(exc)
-        status = 403 if "Missing required role" in message else 401
-        return _json_error(message, status)
 
     return jsonify(
         {
@@ -64,15 +68,5 @@ def admin_profile():
     )
 
 
-def _extract_bearer_token(header_value: str | None) -> str | None:
-    if not header_value:
-        return None
-    parts = header_value.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-    return parts[1]
-
-
 def _json_error(message: str, status: int):
     return jsonify({"errors": [message]}), status
-
