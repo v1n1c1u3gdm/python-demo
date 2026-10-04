@@ -1,6 +1,8 @@
 import base64
+import time
 
 import pytest
+import requests
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import jwt
 
@@ -55,12 +57,27 @@ def rsa_pair():
 def test_decode_token_fetches_and_caches_discovery_and_jwks():
     # Arrange
     private_key, jwk = rsa_pair()
-    token = jwt.encode({"sub": "alice", "realm_access": {"roles": ["author"]}}, private_key, algorithm="RS256", headers={"kid": "test-key"})
+    token = jwt.encode(
+        {
+            "sub": "alice",
+            "iss": "https://id.example/realms/demo",
+            "aud": "api",
+            "exp": int(time.time()) + 300,
+            "typ": "Bearer",
+            "realm_access": {"roles": ["author"]},
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "test-key"},
+    )
     session = FakeSession([
         FakeResponse({"jwks_uri": "https://id.example/keys"}),
         FakeResponse({"keys": [jwk]}),
     ])
-    client = KeycloakClient("https://id.example/", "demo", "api", session=session)
+    client = KeycloakClient(
+        "https://id.example/", "demo", "api", issuer="https://id.example/realms/demo",
+        audience="api", session=session
+    )
 
     # Act
     first_claims = client.decode_token(token)
@@ -162,13 +179,28 @@ def test_exchange_password_omits_secret_for_public_client():
     assert "client_secret" not in session.calls[-1][2]["data"]
 
 
+def test_exchange_password_hides_transport_exception_details():
+    # Arrange
+    class FailingSession(FakeSession):
+        def post(self, url, **kwargs):
+            raise requests.ConnectionError("request contained client-secret-123")
+
+    session = FailingSession([FakeResponse({"token_endpoint": "https://id.example/token"})])
+    client = KeycloakClient("https://id.example", "demo", "api", session=session)
+
+    # Act / Assert
+    with pytest.raises(KeycloakError, match="Authentication service unavailable") as error:
+        client.exchange_password("alice", "password")
+    assert "client-secret-123" not in str(error.value)
+
+
 @pytest.mark.parametrize(
     ("responses", "message"),
     [
-        ([FakeResponse({"error": "offline"}, ok=False)], "Unable to fetch OpenID metadata: offline"),
+    ([FakeResponse({"error": "offline"}, ok=False)], "Unable to fetch OpenID metadata."),
         ([FakeResponse({})], "Keycloak token endpoint not available."),
-        ([FakeResponse({"token_endpoint": "/token"}), FakeResponse({"error_description": "denied"}, ok=False)], "Invalid credentials: denied"),
-        ([FakeResponse({"token_endpoint": "/token"}), FakeResponse(ValueError(), ok=False, text="bad response")], "Invalid credentials: bad response"),
+    ([FakeResponse({"token_endpoint": "/token"}), FakeResponse({"error_description": "denied"}, ok=False)], "Invalid credentials."),
+    ([FakeResponse({"token_endpoint": "/token"}), FakeResponse(ValueError(), ok=False, text="bad response")], "Invalid credentials."),
     ],
 )
 def test_exchange_password_reports_http_and_metadata_errors(responses, message):
@@ -191,7 +223,7 @@ def test_decode_token_rejects_missing_key_and_invalid_jwt():
     # Act / Assert
     with pytest.raises(KeycloakError, match="Invalid token header"):
         client.decode_token("not-a-jwt")
-    with pytest.raises(KeycloakError, match="Unable to resolve signing key"):
+    with pytest.raises(KeycloakError, match="Token validation failed"):
         client.decode_token(jwt.encode({"sub": "alice"}, "secret", algorithm="HS256", headers={"kid": "missing"}))
 
 
@@ -202,7 +234,7 @@ def test_decode_token_without_key_identifier_fails_without_http_request():
     token = jwt.encode({"sub": "alice"}, "secret", algorithm="HS256")
 
     # Act / Assert
-    with pytest.raises(KeycloakError, match="Unable to resolve signing key"):
+    with pytest.raises(KeycloakError, match="Token validation failed"):
         client.decode_token(token)
     assert session.calls == []
 
@@ -218,7 +250,7 @@ def test_decode_token_reports_missing_jwks_and_failed_jwks_request():
     # Act / Assert
     with pytest.raises(KeycloakError, match="JWKS endpoint not available"):
         missing_uri._get_jwks()
-    with pytest.raises(KeycloakError, match="Unable to fetch JWKS: unavailable"):
+    with pytest.raises(KeycloakError, match="Unable to fetch JWKS"):
         failed_fetch._get_jwks()
 
 
@@ -236,6 +268,95 @@ def test_decode_token_rejects_signature_validation_failure():
     # Act / Assert
     with pytest.raises(KeycloakError, match="Token validation failed"):
         client.decode_token(token)
+
+
+def test_decode_token_rejects_untrusted_algorithm_and_missing_claims():
+    # Arrange
+    secret = "shared-secret-that-must-not-be-trusted"
+    jwk = {
+        "kty": "oct",
+        "kid": "test-key",
+        "use": "sig",
+        "alg": "HS256",
+        "k": base64.urlsafe_b64encode(secret.encode()).rstrip(b"=").decode(),
+    }
+    token = jwt.encode(
+        {"sub": "alice", "iss": "https://id.example/realms/demo", "aud": "api", "exp": int(time.time()) + 300, "typ": "Bearer"},
+        secret,
+        algorithm="HS256",
+        headers={"kid": "test-key"},
+    )
+    session = FakeSession([
+        FakeResponse({"jwks_uri": "https://id.example/keys"}),
+        FakeResponse({"keys": [jwk]}),
+    ])
+    client = KeycloakClient(
+        "https://id.example", "demo", "api", issuer="https://id.example/realms/demo",
+        audience="api", session=session
+    )
+
+    # Act / Assert
+    with pytest.raises(KeycloakError, match="Token validation failed"):
+        client.decode_token(token)
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"iss": "https://id.example/realms/demo", "aud": "api", "exp": int(time.time()) + 300, "typ": "Bearer"},
+        {"sub": "alice", "aud": "api", "exp": int(time.time()) + 300, "typ": "Bearer"},
+        {"sub": "alice", "iss": "https://id.example/realms/demo", "exp": int(time.time()) + 300, "typ": "Bearer"},
+        {"sub": "alice", "iss": "https://id.example/realms/demo", "aud": "api", "typ": "Bearer"},
+    ],
+)
+def test_decode_token_rejects_missing_required_claims(claims):
+    # Arrange
+    private_key, jwk = rsa_pair()
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key"})
+    session = FakeSession([
+        FakeResponse({"jwks_uri": "https://id.example/keys"}),
+        FakeResponse({"keys": [jwk]}),
+    ])
+    client = KeycloakClient(
+        "https://id.example", "demo", "api", issuer="https://id.example/realms/demo",
+        audience="api", session=session
+    )
+
+    # Act / Assert
+    with pytest.raises(KeycloakError, match="Token validation failed"):
+        client.decode_token(token)
+
+
+def test_decode_token_requires_expected_issuer_audience_and_access_token():
+    # Arrange
+    private_key, jwk = rsa_pair()
+    session = FakeSession([
+        FakeResponse({"jwks_uri": "https://id.example/keys"}),
+        FakeResponse({"keys": [jwk]}),
+    ])
+    client = KeycloakClient(
+        "https://id.example", "demo", "api", issuer="https://id.example/realms/demo",
+        audience="api", session=session
+    )
+
+    def signed(claims):
+        return jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key"})
+
+    valid = {
+        "sub": "alice", "iss": "https://id.example/realms/demo", "aud": "api",
+        "exp": int(time.time()) + 300, "typ": "Bearer"
+    }
+
+    # Act / Assert
+    for invalid in (
+        {**valid, "iss": "https://attacker.example/realms/demo"},
+        {**valid, "aud": "another-client"},
+        {**valid, "typ": "ID"},
+        {**valid, "sub": ""},
+    ):
+        with pytest.raises(KeycloakError, match="Token validation failed"):
+            client.decode_token(signed(invalid))
+    assert client.decode_token(signed(valid))["sub"] == "alice"
 
 
 def test_extract_and_require_roles_preserve_sorted_unique_string_roles():

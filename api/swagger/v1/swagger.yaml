@@ -23,6 +23,9 @@ paths:
       tags:
         - Authors
       summary: Cria um autor
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -38,6 +41,11 @@ paths:
                 $ref: '#/components/schemas/Author'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /authors/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -58,6 +66,9 @@ paths:
       tags:
         - Authors
       summary: Atualiza um autor
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -73,15 +84,28 @@ paths:
                 $ref: '#/components/schemas/Author'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
     delete:
       tags:
         - Authors
       summary: Remove um autor
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
       responses:
         '204':
           description: Autor removido
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /socials:
     get:
       tags:
@@ -100,6 +124,9 @@ paths:
       tags:
         - Socials
       summary: Cria um perfil social
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -115,6 +142,11 @@ paths:
                 $ref: '#/components/schemas/Social'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /socials/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -135,6 +167,9 @@ paths:
       tags:
         - Socials
       summary: Atualiza um perfil social
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -150,15 +185,28 @@ paths:
                 $ref: '#/components/schemas/Social'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
     delete:
       tags:
         - Socials
       summary: Remove um perfil social
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
       responses:
         '204':
           description: Perfil removido
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /articles:
     get:
       tags:
@@ -177,6 +225,9 @@ paths:
       tags:
         - Articles
       summary: Cria um artigo
+      description: Requer Bearer válido com papel admin ou autor vinculado. Para author, author_id é atribuído pelo servidor.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -192,6 +243,65 @@ paths:
                 $ref: '#/components/schemas/Article'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /authors/{id}/identity:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    put:
+      tags:
+        - Authors
+      summary: Vincula a identidade Keycloak privada a um autor
+      description: Requer Bearer válido com papel admin. Issuer precisa corresponder ao configurado; o vínculo não integra o recurso público Author.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identity]
+              properties:
+                identity:
+                  type: object
+                  required: [issuer, sub]
+                  properties:
+                    issuer:
+                      type: string
+                    sub:
+                      type: string
+      responses:
+        '200':
+          description: Identidade vinculada
+        '400':
+          description: Issuer ou payload inválido
+        '401':
+          description: Bearer ausente ou inválido
+        '403':
+          description: Papel admin ausente
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Identidade já vinculada a outro autor
+    delete:
+      tags:
+        - Authors
+      summary: Remove o vínculo privado de identidade
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Vínculo removido ou já ausente
+        '401':
+          description: Bearer ausente ou inválido
+        '403':
+          description: Papel admin ausente
+        '404':
+          $ref: '#/components/responses/NotFound'
   /articles/count_by_author:
     get:
       tags:
@@ -206,6 +316,40 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ArticlesCountByAuthor'
+  /admin/profile:
+    get:
+      tags:
+        - Authentication
+      summary: Retorna perfil administrativo do principal
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Perfil autenticado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /tech:
+    get:
+      tags:
+        - Administration
+      summary: Relatório técnico
+      description: Requer Bearer válido com papel admin.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Relatório HTML
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /articles/{id}:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -226,12 +370,15 @@ paths:
       tags:
         - Articles
       summary: Atualiza um artigo
+      description: Requer Bearer válido com papel admin ou o autor vinculado ao artigo.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArticleInput'
+              $ref: '#/components/schemas/ArticlePatchInput'
       responses:
         '200':
           description: Artigo atualizado
@@ -241,16 +388,34 @@ paths:
                 $ref: '#/components/schemas/Article'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
     delete:
       tags:
         - Articles
       summary: Remove um artigo
+      description: Requer Bearer válido com papel admin ou o autor vinculado ao artigo.
+      security:
+        - BearerAuth: []
       responses:
         '204':
           description: Artigo removido
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
     ResourceId:
       in: path
@@ -260,6 +425,10 @@ components:
         type: integer
       description: Identificador do recurso
   responses:
+    Unauthorized:
+      description: Bearer ausente ou inválido
+    Forbidden:
+      description: Papel ou propriedade do recurso insuficiente
     NotFound:
       description: Recurso não encontrado
     Unprocessable:
@@ -386,13 +555,50 @@ components:
       type: object
       properties:
         article:
+          oneOf:
+            - $ref: '#/components/schemas/AdminArticleInput'
+            - $ref: '#/components/schemas/AuthorArticleInput'
+    AdminArticleInput:
+      type: object
+      required: [title, slug, published_label, post_entry, author_id]
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        published_label:
+          type: string
+        post_entry:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        author_id:
+          type: integer
+    AuthorArticleInput:
+      type: object
+      required: [title, slug, published_label, post_entry]
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        published_label:
+          type: string
+        post_entry:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    ArticlePatchInput:
+      type: object
+      properties:
+        article:
           type: object
-          required:
-            - title
-            - slug
-            - published_label
-            - post_entry
-            - author_id
+          minProperties: 1
           properties:
             title:
               type: string

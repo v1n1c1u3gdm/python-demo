@@ -46,7 +46,19 @@
       "attributes": {
         "access.token.lifespan": "900",
         "refresh.token.lifespan": "3600"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "python-demo-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "python-demo-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "roles": {

@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import Author, Social
 from schemas import SocialSchema
+from services.authorization import require_admin
 
 from .utils import error_response, to_json
 
@@ -30,6 +31,7 @@ def get_social(social_id: int):
 
 @bp.post("")
 def create_social():
+    require_admin()
     payload = _load_social_payload()
     _ensure_author_exists(payload["author_id"])
 
@@ -41,6 +43,7 @@ def create_social():
 
 @bp.patch("/<int:social_id>")
 def update_social(social_id: int):
+    require_admin()
     payload = _load_social_payload(partial=True)
     social = Social.query.get(social_id)
     if not social:
@@ -57,6 +60,7 @@ def update_social(social_id: int):
 
 @bp.delete("/<int:social_id>")
 def delete_social(social_id: int):
+    require_admin()
     social = Social.query.get(social_id)
     if not social:
         return error_response("Social não encontrado.", status=404)
@@ -91,4 +95,3 @@ def _commit_and_respond(payload, status=200):
         if "slug" in detail:
             return error_response("Slug has already been taken")
         return error_response("Não foi possível salvar o social.")
-

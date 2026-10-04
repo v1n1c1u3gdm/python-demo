@@ -1,3 +1,4 @@
+import os
 import time
 from pathlib import Path
 
@@ -16,15 +17,18 @@ from config import get_config
 from extensions import db, migrate
 from logging_config import configure_logging
 from observability import ObservabilityMetrics
+from services.authorization import AuthorizationError
 from services.keycloak_client import init_keycloak_client
 
 
 def create_app() -> Flask:
     config_class = get_config()
-    configure_logging(config_class.LOG_DIR, config_class.LOG_LEVEL)
+    settings = config_class.from_environment(os.environ)
+    configure_logging(settings.get("LOG_DIR", config_class.LOG_DIR), settings.get("LOG_LEVEL", config_class.LOG_LEVEL))
 
     app = Flask(__name__)
     app.config.from_object(config_class)
+    app.config.update(settings)
     app.wsgi_app = ProxyFix(app.wsgi_app)  # type: ignore
 
     CORS(
@@ -105,13 +109,17 @@ def register_error_handlers(app: Flask, metrics: ObservabilityMetrics) -> None:
         messages = _flatten_errors(error.messages)
         return jsonify({"errors": messages}), 422
 
+    @app.errorhandler(AuthorizationError)
+    def handle_authorization_error(error: AuthorizationError):
+        return jsonify({"errors": [str(error)]}), error.status_code
+
     @app.errorhandler(HTTPException)
     def handle_http_exception(error: HTTPException):
         return jsonify({"errors": [error.description]}), error.code
 
     @app.errorhandler(Exception)
     def handle_exception(error):
-        current_app.logger.exception("Unhandled exception: %s", error)
+        current_app.logger.error("Unhandled exception type=%s", type(error).__name__)
         started = getattr(g, "request_started_at", None)
         duration = time.perf_counter() - started if started is not None else 0.0
         metrics.record_request(
@@ -121,7 +129,7 @@ def register_error_handlers(app: Flask, metrics: ObservabilityMetrics) -> None:
             duration_seconds=duration,
         )
         g.metrics_recorded = True
-        return jsonify({"errors": [str(error)]}), 500
+        return jsonify({"errors": ["Internal server error."]}), 500
 
 
 def _flatten_errors(messages):
@@ -145,4 +153,3 @@ app = create_app()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-

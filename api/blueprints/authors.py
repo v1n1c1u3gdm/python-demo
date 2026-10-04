@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models import Author
 from schemas import AuthorSchema
+from services.authorization import require_admin
 
 from .utils import error_response, not_found, to_json
 
@@ -45,6 +46,7 @@ def get_author(author_id: int):
 
 @bp.post("")
 def create_author():
+    require_admin()
     payload = _load_author_payload()
     author = Author(**payload)
     db.session.add(author)
@@ -54,6 +56,7 @@ def create_author():
 
 @bp.patch("/<int:author_id>")
 def update_author(author_id: int):
+    require_admin()
     payload = _load_author_payload(partial=True)
     author = Author.query.get(author_id)
     if not author:
@@ -67,6 +70,7 @@ def update_author(author_id: int):
 
 @bp.delete("/<int:author_id>")
 def delete_author(author_id: int):
+    require_admin()
     author = Author.query.get(author_id)
     if not author:
         not_found("Autor")
@@ -96,4 +100,3 @@ def _commit_and_respond(payload, status=200):
         if "authors.name" in detail or "unique" in detail:
             return error_response("Name has already been taken")
         return error_response("Não foi possível salvar o autor.")
-

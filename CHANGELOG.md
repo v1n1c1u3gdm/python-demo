@@ -9,6 +9,11 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Autorização por recurso com identidade Keycloak privada de autor, CRUD de artigos por proprietário/admin, configuração
+  explícita de produção e validação obrigatória de issuer/audience; integração opt-in com Keycloak real e mapper de
+  audience no realm de demonstração.
+- ADRs 0049–0052 registram política de autorização, vínculo privado, confiança JWT e configuração explícita de
+  produção. A Fase 1B do roadmap foi validada isoladamente, sem representar implantação de produção.
 - Comando `flask bootstrap-db` e serviço Compose `api-init` para executar migrations e seeds antes dos workers; a API
   aguarda init bem-sucedido.
 - ADRs 0046–0047 com as proteções GitHub aplicadas: PR obrigatório na main sem aprovação externa e
@@ -43,7 +48,7 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Documentação operacional de primeiro startup, atualização de schema/imagem, reinício da API e execução Flask/Gunicorn
-  local; a Fase 1 registra apenas a entrega 1A como concluída.
+  local; as Fases 1A e 1B estão concluídas localmente, sem deploy de produção.
 - Preferência de agentes atualizada para Luna com esforço médio em todas as funções, registrada no ADR-0027.
 - Fase 0 do roadmap em validação, com investigação local de recursos e verificações em containers limitados;
   capacidade de produção e escolhas operacionais da VPS continuam pendentes.

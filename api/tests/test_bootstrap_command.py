@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 
 import pytest
 
@@ -12,6 +13,7 @@ from seeds.data import SEED_NAME
 @pytest.fixture
 def isolated_app(tmp_path, monkeypatch):
     database_path = tmp_path / "application.sqlite"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{database_path}")
     class IsolatedConfig(BaseConfig):
         SQLALCHEMY_DATABASE_URI = f"sqlite+pysqlite:///{database_path}"
         TESTING = False
@@ -20,13 +22,17 @@ def isolated_app(tmp_path, monkeypatch):
     application = app_module.create_app()
     yield application
     with application.app_context():
-        db.session.remove()
-        db.engine.dispose()
+        try:
+            db.session.remove()
+            db.drop_all()
+        finally:
+            db.engine.dispose()
 
 
 def test_creating_non_testing_app_does_not_bootstrap_database(tmp_path, monkeypatch):
     # Arrange
     database_path = tmp_path / "application.sqlite"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{database_path}")
 
     class IsolatedConfig(BaseConfig):
         SQLALCHEMY_DATABASE_URI = f"sqlite+pysqlite:///{database_path}"
@@ -43,6 +49,7 @@ def test_creating_non_testing_app_does_not_bootstrap_database(tmp_path, monkeypa
     # Assert
     assert calls == []
     assert not database_path.exists()
+    assert application.config["SQLALCHEMY_DATABASE_URI"] == f"sqlite+pysqlite:///{database_path}"
     with application.app_context():
         db.engine.dispose()
 
@@ -164,10 +171,11 @@ def test_seed_failure_is_reported_without_secrets(isolated_app, monkeypatch, cap
     assert "seed-secret" not in caplog.text
 
 
-def test_bootstrap_command_preserves_edited_records_when_repeated(isolated_app):
+def test_bootstrap_command_preserves_edited_records_when_repeated(isolated_app, tmp_path):
     # Arrange
     app = isolated_app
     runner = app.test_cli_runner()
+    database_path = tmp_path / "application.sqlite"
 
     # Act
     with app.app_context():
@@ -182,9 +190,18 @@ def test_bootstrap_command_preserves_edited_records_when_repeated(isolated_app):
     # Assert
     assert first_result.exit_code == 0
     assert second_result.exit_code == 0
+    assert app.config["SQLALCHEMY_DATABASE_URI"] == f"sqlite+pysqlite:///{database_path}"
+    assert database_path.exists()
     with app.app_context():
         assert Author.query.one().name == "Edited after bootstrap"
         assert SeedRun.query.filter_by(name=SEED_NAME).count() == 1
+    with sqlite3.connect(database_path) as connection:
+        persisted_authors = connection.execute("SELECT COUNT(*) FROM authors").fetchone()[0]
+        persisted_seed_runs = connection.execute(
+            "SELECT COUNT(*) FROM seed_runs WHERE name = ?", (SEED_NAME,)
+        ).fetchone()[0]
+    assert persisted_authors > 0
+    assert persisted_seed_runs == 1
 
 
 def test_failed_seed_can_be_retried_without_persisting_seed_run(isolated_app, monkeypatch):
