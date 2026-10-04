@@ -14,6 +14,8 @@ autenticação ao Keycloak.
 flowchart LR
     Browser[Navegador] --> Nginx[NGINX / SPA Vue]
     Browser --> API[Gunicorn / Flask]
+    DB --> Init[api-init / bootstrap-db]
+    Init --> API
     API --> DB[(MySQL)]
     API --> KC[Keycloak / OpenID / JWKS]
 ```
@@ -29,10 +31,11 @@ como serviço no Compose, com volume `mysql_data`.
 | `README.md` | Apresentação, stack e instruções de execução local e Docker. |
 | `AGENTS.md` | Processo de desenvolvimento: branches, TDD, revisão, cobertura e modelos. |
 | `ARCHITECTURE.md` | Mapa atual, fluxos, contexto histórico e orientação de escopo. |
+| `ROADMAP.md` | Expectativas, dependências, critérios de conclusão e decisões pendentes das próximas fases. Não substitui a descrição da arquitetura atual. |
 | `CHANGELOG.md` | Mudanças para pessoas; distingue alterações pendentes de histórico reconstruído. |
 | `adrs/` | Decisões numeradas e cumulativas, com evidências, contexto e consequências. |
 | `Dockerfile` | Estágios `api-app`, `ui-build` e `ui-app`; Python 3.14.7, build Node 24 e runtime NGINX. |
-| `docker-compose.yml` | Serviços `api`, `ui`, `db` e `keycloak`, portas, ambiente, dependências e volumes. |
+| `docker-compose.yml` | Serviços `api`, `api-init`, `ui`, `db` e `keycloak`, portas, ambiente, dependências e volumes. |
 | `LICENSE` | Licença MIT atual. |
 | `.dockerignore` | Evita enviar dependências, planos locais e artefatos gerados ao contexto Docker. |
 | `.gitignore` | Exclusões de dependências, ambientes, artefatos gerados e planos/specs locais em `docs/`. |
@@ -45,7 +48,8 @@ como serviço no Compose, com volume `mysql_data`.
 
 | Caminho | Função e quando alterar |
 | --- | --- |
-| `app.py` | Factory `create_app()`, instância WSGI `app`, registro de extensões, CORS, Swagger, hooks HTTP, erros e bootstrap de banco. Alterar para comportamento transversal ou registro de integração. |
+| `app.py` | Factory `create_app()` sem efeitos de banco, instância WSGI `app`, registro de extensões, CORS, Swagger, hooks HTTP e erros. Alterar para comportamento transversal ou registro de integração. |
+| `bootstrap.py` | Comando Flask `bootstrap-db`, que aplica migrations e seeds explicitamente antes de servir requisições. |
 | `config.py` | Configuração por ambiente, banco, logs, Swagger e Keycloak. `TestConfig` usa SQLite em memória por padrão. |
 | `extensions.py` | Instâncias compartilhadas de SQLAlchemy e Flask-Migrate. |
 | `requirements.txt` e `requirements-dev.txt` | Dependências Python fixadas; o arquivo de desenvolvimento inclui pytest-cov e Ruff. |
@@ -76,6 +80,8 @@ como serviço no Compose, com volume `mysql_data`.
 | `tests/requests/` | Testes HTTP de artigos, autores, perfis, autenticação, saúde, métricas e relatório técnico. |
 | `tests/factories/` e `tests/utils.py` | Construção de dados e utilidades de teste. |
 | `tests/services/` e `tests/seeds/` | Testes do cliente Keycloak real com HTTP simulado e do bootstrap de dados no banco de testes. |
+| `tests/test_bootstrap_command.py` | Testes do comando `bootstrap-db`, factory sem efeitos de banco e repetição segura. |
+| `tests/integration/test_compose_bootstrap.py` | Integrações MySQL/Compose opt-in para init, workers, falhas e ciclo de vida. |
 | `tests/test_migrations.py` | Exercita upgrade/downgrade da migration inicial em banco temporário. |
 
 ### UI: `ui/`
@@ -116,8 +122,9 @@ API, cliente Keycloak e testes de autenticação.
 
 1. **Conteúdo:** view → serviço JavaScript → blueprint → schema/model → banco → JSON → view. Os endpoints de alteração
    usam envelopes `article`, `author` e `social`; conferir schema e teste HTTP antes de modificar payloads.
-2. **Inicialização:** importar `app.py` cria a aplicação. Fora de `TESTING`, executa migrations e seeds. Mudanças nesse
-   caminho afetam também o startup dos workers Gunicorn.
+2. **Inicialização:** importar `app.py` cria a aplicação sem efeitos de banco. O comando explícito
+   `flask --app app bootstrap-db` aplica migrations e seeds. No Compose, `api-init` espera o banco saudável e a API
+   aguarda o sucesso do init antes de iniciar quatro workers; falha do init bloqueia a API nova.
 3. **Identidade:** `/admin` envia credenciais a `/login`; a API usa o grant de senha do Keycloak, valida o token e
    devolve tokens/papéis. A UI guarda a sessão e consulta `/admin/profile`, que exige o papel configurado. Os CRUDs não
    recebem proteção automaticamente por existir esse fluxo.
@@ -164,15 +171,16 @@ Na atualização em desenvolvimento, a migração para Vue 3, Vite e Vitest est�
 [ADR-0031](adrs/ADR-0031.md), [ADR-0032](adrs/ADR-0032.md) e [ADR-0033](adrs/ADR-0033.md).
 O [ADR-0034](adrs/ADR-0034.md) registra a remoção de BootstrapVue com preservação do Bootstrap 4;
 os [ADR-0035](adrs/ADR-0035.md) e [ADR-0036](adrs/ADR-0036.md) registram Ruff e markdownlint-cli2.
-Planos e especificações ficam locais conforme o [ADR-0037](adrs/ADR-0037.md). Essas alterações ainda não
-correspondem a um release nem a um commit publicado.
+Planos e especificações ficam locais conforme o [ADR-0037](adrs/ADR-0037.md). Essas alterações não correspondem
+a um release identificado.
 
 ## Limites atuais relevantes para agentes
 
 - Testes API usam SQLite e testes UI usam mocks; resultados verdes não comprovam integração MySQL/Keycloak nem o Compose
   completo.
-- O startup com quatro workers aplica bootstrap em paralelo e pode falhar ao criar tabelas em banco vazio. A
-  coordenação desse bootstrap ainda depende de alinhamento arquitetural.
+- `api-init` coordena um projeto Compose por vez; exclusão entre projetos, hosts ou execuções manuais concorrentes não
+  foi implementada. Serializar essas execuções. A atualização de schema deve parar a API, executar init e confirmar
+  exit code 0 antes de iniciar os workers com a imagem nova.
 - As contas anteriores `admin` e `vinicius` no realm não têm nome e sobrenome exigidos pelo perfil do Keycloak 26.4.7;
   o login pode retornar `Account is not fully set up`. O usuário de testes `john.doe` tem perfil completo.
   Testes unitários não detectam essa restrição do servidor real.
@@ -191,3 +199,23 @@ correspondem a um release nem a um commit publicado.
 
 Atualizar este mapa quando houver mudanças de estrutura ou fluxo e registrar novas decisões em ADRs, preservando os
 registros anteriores.
+
+## Evolução planejada
+
+O [ROADMAP](ROADMAP.md) organiza a evolução futura, separando escolhas alinhadas de propostas pendentes.
+Os [ADRs 0038](adrs/ADR-0038.md) a [0045](adrs/ADR-0045.md) registram decisões de planejamento;
+a aceitação dessas escolhas não significa que a pipeline, o cofre, o tapume ou os novos gates já estejam implementados.
+
+A escolha da plataforma de CI, o editor visual e a autorização das operações de escrita continuam sujeitos ao desenho
+e ao alinhamento das fases correspondentes. O bootstrap por serviço init está implementado e registrado no
+[ADR-0048](adrs/ADR-0048.md), que substitui o registro histórico [ADR-0010](adrs/ADR-0010.md).
+
+## Proteções de integração
+
+As regras GitHub aplicadas exigem PR para integrar à main, sem aprovação externa e sem bypass para push direto,
+conforme [ADR-0046](adrs/ADR-0046.md). Force push e exclusão da main estão bloqueados.
+Hoje somente o proprietário tem permissão de escrita; contribuições externas podem usar forks e PRs.
+
+A criação de branches no repositório exige prefixos convencionais conforme [ADR-0047](adrs/ADR-0047.md).
+A regra valida o prefixo, não todo o kebab-case nem branches em forks externos. AGENTS.md mantém a convenção completa.
+Essas configurações ficam no GitHub; os ADRs documentam seu estado e não reaplicam regras em um clone.

@@ -9,8 +9,17 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Comando `flask bootstrap-db` e serviço Compose `api-init` para executar migrations e seeds antes dos workers; a API
+  aguarda init bem-sucedido.
+- ADRs 0046–0047 com as proteções GitHub aplicadas: PR obrigatório na main sem aprovação externa e
+  prefixos semânticos obrigatórios para criação de branches no repositório.
+- Roadmap em fases para operação na VPS, pipeline local reproduzível, gates CLI, cofre KDBX, manutenção,
+  observabilidade, Playwright, administração de posts e documentação de uso.
+- ADRs 0038–0045 com escolhas alinhadas para o desenvolvimento futuro; ferramentas e mecanismos ainda não implementados.
 - Usuário de testes John Doe no realm Keycloak, com perfil completo e papéis para validar a área administrativa.
 - Testes do cliente Keycloak com HTTP simulado, bootstrap de seeds e upgrade/downgrade da migration inicial.
+- Testes de regressão da factory e do comando de bootstrap, além de integrações MySQL/Compose opt-in para init,
+  falhas, repetição e ciclo de vida.
 - Testes de inicialização Vue, router, variáveis de ambiente e navegação durante a migração.
 - Configuração pytest-cov de toda a produção Python, incluindo migrations, com gate de 85% somente de linhas.
 - Linters Ruff para Python e markdownlint-cli2 para documentação, com dependências e comandos versionados.
@@ -33,6 +42,11 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Documentação operacional de primeiro startup, atualização de schema/imagem, reinício da API e execução Flask/Gunicorn
+  local; a Fase 1 registra apenas a entrega 1A como concluída.
+- Preferência de agentes atualizada para Luna com esforço médio em todas as funções, registrada no ADR-0027.
+- Fase 0 do roadmap em validação, com investigação local de recursos e verificações em containers limitados;
+  capacidade de produção e escolhas operacionais da VPS continuam pendentes.
 - Dependências Python atualizadas, incluindo Flask 3.1, SQLAlchemy 2.1, Marshmallow 4 e OpenTelemetry 1.45;
   dependências de pytest/Ruff separadas em `api/requirements-dev.txt`.
 - UI migrada para Vue 3, Vue Router 4, Vite e Vitest/Vue Test Utils 2; Bootstrap 4 e visual existente preservados.

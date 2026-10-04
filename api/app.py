@@ -11,11 +11,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import models  # noqa: F401  # Ensure models are registered before migrations
 from blueprints import register_blueprints
+from bootstrap import register_bootstrap_command
 from config import get_config
 from extensions import db, migrate
 from logging_config import configure_logging
 from observability import ObservabilityMetrics
-from seeds import bootstrap_seed_data
 from services.keycloak_client import init_keycloak_client
 
 
@@ -48,10 +48,7 @@ def create_app() -> Flask:
     register_request_hooks(app, observability)
     register_blueprints(app)
     init_keycloak_client(app)
-
-    if not app.config.get("TESTING"):
-        with app.app_context():
-            run_database_bootstrap()
+    register_bootstrap_command(app)
 
     return app
 
@@ -141,13 +138,6 @@ def _flatten_errors(messages):
     if isinstance(messages, (list, tuple)):
         return [str(item) for item in messages]
     return [str(messages)]
-
-
-def run_database_bootstrap():
-    from flask_migrate import upgrade
-
-    upgrade()
-    bootstrap_seed_data()
 
 
 app = create_app()
