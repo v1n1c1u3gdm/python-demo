@@ -1,5 +1,7 @@
 # Python Demo (Flask 3 API + MySQL)
 
+A evolução planejada está em [ROADMAP.md](ROADMAP.md), com fases e critérios de conclusão.
+
 Aplicação com uma API Flask 3 rodando sobre **python:3.14.7-slim**, servida pelo Gunicorn e usando MySQL
 containerizado. A raiz está organizada em dois módulos:
 
@@ -57,12 +59,12 @@ containerizado. A raiz está organizada em dois módulos:
 ### Passo a passo rápido
 
 ```bash
-docker compose build
-docker compose up
+docker compose up --build
 ```
 
-- O estágio `api-app` do `Dockerfile` gera a imagem da API (python:3.14.7-slim + Gunicorn).
-- As migrations Flask-Migrate e os seeds são executados automaticamente no startup do container `api`.
+- O serviço `api-init` aguarda o MySQL saudável e executa `flask bootstrap-db` uma vez antes dos quatro workers da API.
+- Se migration ou seed falhar, o init termina com erro e a API nova não inicia.
+- O serviço `api` usa a mesma imagem e configuração de build do `api-init`; ambos são definidos no `Dockerfile`.
 - A UI depende do início do container da API e fica disponível em `http://localhost:8080/`; essa dependência não
   verifica a saúde da API.
 - Swagger continua em `http://localhost:3000/api-docs`.
@@ -70,9 +72,36 @@ docker compose up
   `KEYCLOAK_ADMIN_PASSWORD=admin!123`. A importação do realm (`keycloak/realm-python-demo.json`) ocorre no primeiro
   boot.
 
-Na validação da atualização, o startup em banco vazio apresentou concorrência entre os quatro workers ao aplicar
-migrations. O startup com quatro workers passou no banco já migrado. A coordenação do bootstrap para banco vazio ou
-novas migrations continua pendente de decisão arquitetural.
+O bootstrap coordena apenas o init de um projeto Compose. Não há exclusão entre diferentes projetos/hosts nem entre
+execuções manuais concorrentes; mantenha essas execuções serializadas. O comando `docker compose restart api` reinicia
+os workers sem recriar o init.
+
+### Atualizar imagem ou schema
+
+Para uma atualização que altere a imagem ou inclua migrations, pare primeiro a API para que nenhum worker use o schema
+durante a mudança. Se a UI também precisar de imagem nova, pare e reconstrua-a junto:
+
+```bash
+set -e
+docker compose stop api ui
+docker compose build api
+# Inclua ui se a atualização também mudar a imagem da UI:
+# docker compose build api ui
+docker compose up -d --force-recreate api-init
+docker compose wait api-init
+init_id="$(docker compose ps -aq api-init)"
+test -n "$init_id"
+init_exit_code="$(docker inspect --format='{{.State.ExitCode}}' "$init_id")"
+test "$init_exit_code" -eq 0
+docker compose up -d api ui
+```
+
+Só inicie API e UI depois de confirmar exit code 0 do init. Se esse gate falhar, confira `docker compose logs api-init`
+e não inicie a API nova. `docker compose wait` aguarda o término; a inspeção explícita confirma o sucesso. Faça o init
+em modo detached: não use `docker compose up api-init` em primeiro plano com o banco já em execução, pois essa forma
+pode tentar iniciar novamente as dependências. Não use `--no-deps` para contornar a ordem do Compose. Um `docker
+compose up --build` normal também pode executar o init novamente, sequencialmente; migrations e seeds repetidos são
+seguros.
 
 ### Variáveis relevantes
 
@@ -128,12 +157,12 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 export DATABASE_URL=mysql+pymysql://ruby-demo:2u8y-c0d3@127.0.0.1:3306/ruby_demo_development
+flask --app app bootstrap-db
 gunicorn -b 0.0.0.0:3000 app:app
 ```
 
-- O bootstrap do `app.py` executa migrations automaticamente; para rodá-las manualmente use `flask db upgrade`.
-- Seeds podem ser disparados manualmente abrindo um shell Flask (`flask --app app.py shell`) e executando
-  `from seeds import bootstrap_seed_data; bootstrap_seed_data()`.
+- Em execução fora do Compose, rode `flask --app app bootstrap-db` explicitamente antes de iniciar Gunicorn ou Flask.
+- Esse comando aplica migrations pendentes e seeds idempotentes. Se falhar, corrija a causa antes de iniciar a API.
 
 ## Testes automatizados
 

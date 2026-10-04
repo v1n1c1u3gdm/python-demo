@@ -1,16 +1,28 @@
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: api-app
+  image: python-demo-api:local
+  working_dir: /app/api
+  environment: &api-environment
+    FLASK_ENV: development
+    DATABASE_URL: mysql+pymysql://ruby-demo:2u8y-c0d3@db:3306/ruby_demo_development
+    VINICIUS_PUBLIC_KEY: "${VINICIUS_PUBLIC_KEY:-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakePublicKeyForViniciusSeedRecord}"
+    LOG_DIR: /app/api/logs
+
 services:
+  api-init:
+    <<: *api-common
+    command: flask bootstrap-db
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: api-app
-    working_dir: /app/api
+    <<: *api-common
     command: gunicorn -b 0.0.0.0:3000 -w 4 --threads 4 app:app
-    environment:
-      FLASK_ENV: development
-      DATABASE_URL: mysql+pymysql://ruby-demo:2u8y-c0d3@db:3306/ruby_demo_development
-      VINICIUS_PUBLIC_KEY: "${VINICIUS_PUBLIC_KEY:-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakePublicKeyForViniciusSeedRecord}"
-      LOG_DIR: /app/api/logs
     ports:
       - "3000:3000"
     volumes:
@@ -18,6 +30,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      api-init:
+        condition: service_completed_successfully
 
   ui:
     build:
