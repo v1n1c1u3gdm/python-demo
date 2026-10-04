@@ -22,6 +22,11 @@ class BaseConfig:
 
     SQLALCHEMY_DATABASE_URI = DEVELOPMENT_DATABASE_URL
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+    READINESS_TIMEOUT_SECONDS = 3.0
+    READINESS_MYSQL_CONNECT_TIMEOUT_SECONDS = 1.0
+    READINESS_MYSQL_READ_TIMEOUT_SECONDS = 1.0
+    READINESS_KEYCLOAK_CONNECT_TIMEOUT_SECONDS = 0.5
+    READINESS_KEYCLOAK_READ_TIMEOUT_SECONDS = 1.0
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     LOG_LEVEL = "INFO"
@@ -33,7 +38,10 @@ class BaseConfig:
     OPENAPI_SERVICE_NAME = SERVICE_NAME
     OPENAPI_SERVICE_NAMESPACE = "python-demo"
 
-    OTEL_EXPORT_INTERVAL_MS = 60000
+    OTEL_METRICS_ENABLED = False
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = "http://otel-collector:4318/v1/metrics"
+    OTEL_EXPORT_INTERVAL_MS = 10000
+    OTEL_EXPORT_TIMEOUT_SECONDS = 2
 
     KEYCLOAK_BASE_URL = "http://keycloak:8080"
     KEYCLOAK_REALM = "python-demo"
@@ -53,7 +61,12 @@ class BaseConfig:
             "SQLALCHEMY_DATABASE_URI": environ.get("DATABASE_URL", cls.SQLALCHEMY_DATABASE_URI),
             "LOG_LEVEL": environ.get("LOG_LEVEL", cls.LOG_LEVEL),
             "LOG_DIR": Path(environ.get("LOG_DIR", str(cls.LOG_DIR))),
-            "OTEL_EXPORT_INTERVAL_MS": int(environ.get("OTEL_EXPORT_INTERVAL_MS", "60000")),
+            "OTEL_METRICS_ENABLED": environ.get("OTEL_METRICS_ENABLED", "false").lower() == "true",
+            "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": environ.get(
+                "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", cls.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            ),
+            "OTEL_EXPORT_INTERVAL_MS": int(environ.get("OTEL_EXPORT_INTERVAL_MS", "10000")),
+            "OTEL_EXPORT_TIMEOUT_SECONDS": int(environ.get("OTEL_EXPORT_TIMEOUT_SECONDS", "2")),
             "KEYCLOAK_BASE_URL": base_url,
             "KEYCLOAK_REALM": realm,
             "KEYCLOAK_CLIENT_ID": client_id,

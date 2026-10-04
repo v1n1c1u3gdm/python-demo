@@ -1,3 +1,4 @@
+import atexit
 import os
 import time
 from pathlib import Path
@@ -42,13 +43,18 @@ def create_app() -> Flask:
     FlaskInstrumentor().instrument_app(app)
 
     observability = ObservabilityMetrics(
-        service_name=config_class.SERVICE_NAME,
-        namespace=getattr(config_class, "OPENAPI_SERVICE_NAMESPACE", "python-demo"),
+        service_name=app.config["SERVICE_NAME"],
+        namespace=app.config.get("OPENAPI_SERVICE_NAMESPACE", "python-demo"),
+        otel_metrics_enabled=app.config["OTEL_METRICS_ENABLED"],
+        otel_exporter_endpoint=app.config["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"],
+        export_interval_millis=app.config["OTEL_EXPORT_INTERVAL_MS"],
+        export_timeout_seconds=app.config["OTEL_EXPORT_TIMEOUT_SECONDS"],
     )
+    atexit.register(observability.shutdown)
     app.extensions["observability_metrics"] = observability
 
     register_swagger(app)
-    register_error_handlers(app, observability)
+    register_error_handlers(app)
     register_request_hooks(app, observability)
     register_blueprints(app)
     init_keycloak_client(app)
@@ -79,6 +85,7 @@ def register_request_hooks(app: Flask, metrics: ObservabilityMetrics) -> None:
     @app.before_request
     def start_timer():
         g.request_started_at = time.perf_counter()
+        g.metrics_recorded = False
 
     @app.after_request
     def record_metrics(response):
@@ -88,7 +95,7 @@ def register_request_hooks(app: Flask, metrics: ObservabilityMetrics) -> None:
         duration = time.perf_counter() - started if started is not None else 0.0
         metrics.record_request(
             method=request.method,
-            path=request.path,
+            route=request.url_rule.rule if request.url_rule is not None else "404",
             status=response.status_code,
             duration_seconds=duration,
         )
@@ -103,7 +110,7 @@ def register_request_hooks(app: Flask, metrics: ObservabilityMetrics) -> None:
         return response
 
 
-def register_error_handlers(app: Flask, metrics: ObservabilityMetrics) -> None:
+def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(ValidationError)
     def handle_validation_error(error: ValidationError):
         messages = _flatten_errors(error.messages)
@@ -120,15 +127,6 @@ def register_error_handlers(app: Flask, metrics: ObservabilityMetrics) -> None:
     @app.errorhandler(Exception)
     def handle_exception(error):
         current_app.logger.error("Unhandled exception type=%s", type(error).__name__)
-        started = getattr(g, "request_started_at", None)
-        duration = time.perf_counter() - started if started is not None else 0.0
-        metrics.record_request(
-            method=request.method,
-            path=request.path,
-            status=500,
-            duration_seconds=duration,
-        )
-        g.metrics_recorded = True
         return jsonify({"errors": ["Internal server error."]}), 500
 
 

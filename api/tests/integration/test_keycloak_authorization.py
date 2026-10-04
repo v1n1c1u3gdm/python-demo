@@ -99,7 +99,13 @@ class IsolatedKeycloakProject:
     def run_python(self, source: str, timeout: int = 120) -> dict[str, object]:
         result = self.run("exec", "-T", "api", "python", "-", input_text=source, timeout=timeout)
         if result.returncode:
-            pytest.fail(f"isolated API scenario failed with exit code {result.returncode}")
+            safe_stderr = result.stderr
+            for secret in (self.db_password, self.root_password):
+                safe_stderr = safe_stderr.replace(secret, "[redacted]")
+            pytest.fail(
+                f"isolated API scenario failed with exit code {result.returncode}: "
+                f"{safe_stderr[-3000:]}"
+            )
         try:
             return json.loads(result.stdout.strip().splitlines()[-1])
         except (IndexError, json.JSONDecodeError):
@@ -559,16 +565,19 @@ from models.author_identity import find_author_id
 app = create_app()
 with app.app_context():
     upgrade(revision='20251130_0001')
-    legacy = Author(
-        name='Preserved legacy author',
-        birthdate=date(1990, 1, 1),
-        photo_url='https://example.test/legacy.png',
-        public_key='legacy-key',
-        bio='Existing row before private identity migration',
+    legacy_result = db.session.execute(
+        db.text('''INSERT INTO authors
+            (name, birthdate, photo_url, public_key, bio, created_at, updated_at)
+            VALUES (:name, :birthdate, :photo_url, :public_key, :bio, NOW(), NOW())'''),
+        {
+            'name': 'Preserved legacy author',
+            'birthdate': date(1990, 1, 1),
+            'photo_url': 'https://example.test/legacy.png',
+            'public_key': 'legacy-key',
+            'bio': 'Existing row before private identity migration',
+        },
     )
-    db.session.add(legacy)
-    db.session.flush()
-    legacy_id = legacy.id
+    legacy_id = legacy_result.lastrowid
     db.session.commit()
     db.session.remove()
     upgrade()

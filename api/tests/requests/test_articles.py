@@ -228,3 +228,128 @@ def test_unlinked_author_is_forbidden(client, unlinked_author_headers):
 
     # Assert
     assert response.status_code == 403
+
+
+def test_admin_can_store_and_render_unsanitized_article_html(client, admin_headers):
+    # Arrange
+    author = AuthorFactory()
+    raw_html = '<p><script>alert("raw")</script><strong>trusted</strong></p>'
+
+    # Act
+    response = client.post(
+        "/articles",
+        headers=admin_headers,
+        json={"article": {"title": "Raw", "slug": "raw-html", "published_label": "Today", "post_entry": raw_html, "tags": [], "author_id": author.id, "bypass_sanitization": True}},
+    )
+
+    # Assert
+    assert response.status_code == 201
+    article = ArticleFactory._meta.model.query.filter_by(slug="raw-html").one()
+    assert article.bypass_sanitization is True
+    assert article.post_entry == raw_html
+    assert json_body(response)["post_entry"] == raw_html
+    assert json_body(response)["bypass_sanitization"] is True
+
+
+def test_author_cannot_submit_article_bypass_even_when_false(app, client, author_headers):
+    # Arrange
+    owner = AuthorFactory()
+    db.session.add(AuthorIdentity(author_id=owner.id, issuer=app.config["KEYCLOAK_ISSUER"].encode(), subject=b"linked-author-subject"))
+
+    # Act
+    response = client.post(
+        "/articles",
+        headers=author_headers,
+        json={"article": {"title": "Rejected", "slug": "author-bypass", "published_label": "Today", "post_entry": "<script>x</script><p>safe</p>", "tags": [], "bypass_sanitization": False}},
+    )
+
+    # Assert
+    assert response.status_code == 422
+    assert ArticleFactory._meta.model.query.filter_by(slug="author-bypass").first() is None
+
+
+def test_author_editing_raw_article_content_revokes_bypass_and_sanitizes(app, client, author_headers):
+    # Arrange
+    owner = AuthorFactory()
+    db.session.add(AuthorIdentity(author_id=owner.id, issuer=app.config["KEYCLOAK_ISSUER"].encode(), subject=b"linked-author-subject"))
+    article = ArticleFactory(author=owner, post_entry="<script>old</script><p>old</p>", bypass_sanitization=True)
+
+    # Act
+    response = client.patch(
+        f"/articles/{article.id}",
+        headers=author_headers,
+        json={"article": {"post_entry": "<script>alert(1)</script><p>edited</p>"}},
+    )
+
+    # Assert
+    assert response.status_code == 200
+    assert article.author_id == owner.id
+    assert article.bypass_sanitization is False
+    assert article.post_entry == "<p>edited</p>"
+    assert json_body(response)["post_entry"] == "<p>edited</p>"
+
+
+def test_author_metadata_patch_preserves_admin_bypass(app, client, author_headers):
+    # Arrange
+    owner = AuthorFactory()
+    db.session.add(AuthorIdentity(author_id=owner.id, issuer=app.config["KEYCLOAK_ISSUER"].encode(), subject=b"linked-author-subject"))
+    raw_html = "<script>approved</script><p>trusted</p>"
+    article = ArticleFactory(author=owner, post_entry=raw_html, bypass_sanitization=True)
+
+    # Act
+    response = client.patch(f"/articles/{article.id}", headers=author_headers, json={"article": {"title": "Metadata only"}})
+
+    # Assert
+    assert response.status_code == 200
+    assert article.author_id == owner.id
+    assert article.bypass_sanitization is True
+    assert article.post_entry == raw_html
+    assert json_body(response)["post_entry"] == raw_html
+
+
+def test_admin_revoking_bypass_sanitizes_stored_article(client, admin_headers):
+    # Arrange
+    article = ArticleFactory(post_entry="<script>alert(1)</script><p>kept</p>", bypass_sanitization=True)
+
+    # Act
+    response = client.patch(f"/articles/{article.id}", headers=admin_headers, json={"article": {"bypass_sanitization": False}})
+
+    # Assert
+    assert response.status_code == 200
+    assert article.bypass_sanitization is False
+    assert article.post_entry == "<p>kept</p>"
+    assert json_body(response)["post_entry"] == "<p>kept</p>"
+
+
+def test_admin_content_patch_preserves_existing_bypass_when_flag_is_omitted(client, admin_headers):
+    # Arrange
+    article = ArticleFactory(post_entry="<script>approved</script><p>old</p>", bypass_sanitization=True)
+    raw_html = "<script>still approved</script><p>new</p>"
+
+    # Act
+    response = client.patch(f"/articles/{article.id}", headers=admin_headers, json={"article": {"post_entry": raw_html}})
+
+    # Assert
+    assert response.status_code == 200
+    assert article.bypass_sanitization is True
+    assert article.post_entry == raw_html
+    assert json_body(response)["post_entry"] == raw_html
+
+
+def test_admin_article_write_is_sanitized_by_default(client, admin_headers):
+    # Arrange
+    author = AuthorFactory()
+
+    # Act
+    response = client.post(
+        "/articles",
+        headers=admin_headers,
+        json={"article": {"title": "Sanitized", "slug": "sanitized-default", "published_label": "Today", "post_entry": "<script>removed</script><p>kept</p>", "tags": [], "author_id": author.id}},
+    )
+
+    # Assert
+    assert response.status_code == 201
+    article = ArticleFactory._meta.model.query.filter_by(slug="sanitized-default").one()
+    assert article.bypass_sanitization is False
+    assert article.post_entry == "<p>kept</p>"
+    assert json_body(response)["post_entry"] == "<p>kept</p>"

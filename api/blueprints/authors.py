@@ -7,6 +7,7 @@ from extensions import db
 from models import Author
 from schemas import AuthorSchema
 from services.authorization import require_admin
+from services.html_sanitizer import sanitize_html
 
 from .utils import error_response, not_found, to_json
 
@@ -48,6 +49,9 @@ def get_author(author_id: int):
 def create_author():
     require_admin()
     payload = _load_author_payload()
+    if payload.get("bypass_sanitization") is not True:
+        payload["bypass_sanitization"] = False
+        payload["bio"] = sanitize_html(payload["bio"])
     author = Author(**payload)
     db.session.add(author)
     db.session.flush()
@@ -61,6 +65,11 @@ def update_author(author_id: int):
     author = Author.query.get(author_id)
     if not author:
         not_found("Autor")
+
+    next_bypass = payload.get("bypass_sanitization", author.bypass_sanitization)
+    if not next_bypass:
+        bio = payload.get("bio", author.bio)
+        payload["bio"] = sanitize_html(bio)
 
     for key, value in payload.items():
         setattr(author, key, value)

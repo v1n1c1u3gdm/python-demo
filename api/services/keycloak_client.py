@@ -158,6 +158,30 @@ class KeycloakClient:
         self._well_known_expires_at = time.time() + self._cache_ttl
         return self._well_known
 
+    def fetch_fresh_discovery(
+        self, timeout: tuple[float, float], *, session: Optional[requests.Session] = None
+    ) -> Dict[str, Any]:
+        """Fetch realm metadata without trusting the token-validation cache."""
+        url = f"{self.base_url}/realms/{self.realm}/.well-known/openid-configuration"
+        owns_session = session is None
+        probe_session = session or requests.Session()
+        try:
+            response = probe_session.get(url, timeout=timeout)
+            try:
+                if not response.ok:
+                    raise KeycloakError("Unable to fetch OpenID metadata.")
+                metadata = response.json()
+            finally:
+                response.close()
+        except (requests.RequestException, ValueError) as exc:
+            raise KeycloakError("Unable to fetch OpenID metadata.") from exc
+        finally:
+            if owns_session:
+                probe_session.close()
+        if not isinstance(metadata, dict):
+            raise KeycloakError("Invalid OpenID metadata response.")
+        return metadata
+
     def _get_jwks(self) -> Dict[str, Any]:
         if self._jwks and time.time() < self._jwks_expires_at:
             return self._jwks
@@ -194,7 +218,9 @@ class KeycloakClient:
         return None
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "KeycloakClient":
+    def from_config(
+        cls, config: Dict[str, Any], *, session: Optional[requests.Session] = None
+    ) -> "KeycloakClient":
         return cls(
             config.get("KEYCLOAK_BASE_URL", "http://keycloak:8080"),
             config.get("KEYCLOAK_REALM", "python-demo"),
@@ -205,6 +231,7 @@ class KeycloakClient:
                 f"{config.get('KEYCLOAK_BASE_URL', 'http://keycloak:8080').rstrip('/')}/realms/{config.get('KEYCLOAK_REALM', 'python-demo')}",
             ),
             audience=config.get("KEYCLOAK_AUDIENCE", config.get("KEYCLOAK_CLIENT_ID", "python-demo-api")),
+            session=session,
         )
 
 

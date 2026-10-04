@@ -22,7 +22,12 @@ services:
 
   api:
     <<: *api-common
-    command: gunicorn -b 0.0.0.0:3000 -w 4 --threads 4 app:app
+    command: ["/app/api/scripts/start-gunicorn.sh", "--config", "/app/api/gunicorn.conf.py", "-b", "0.0.0.0:3000", "-w", "4", "--threads", "4", "app:app"]
+    environment:
+      <<: *api-environment
+      PROMETHEUS_MULTIPROC_DIR: /tmp/python-demo-prometheus-${COMPOSE_PROJECT_NAME:-python-demo}
+      OTEL_METRICS_ENABLED: ${OTEL_METRICS_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: http://otel-collector:4318/v1/metrics
     ports:
       - "3000:3000"
     volumes:
@@ -73,6 +78,14 @@ services:
       - ./keycloak/realm-python-demo.json:/opt/keycloak/data/import/realm-python-demo.json:ro
     depends_on:
       - db
+
+  otel-collector:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.159.0@sha256:1f2c54a30e713fac6b3ae77a1ec84010c2007e29ced8ec666214fc2f6739c1cc
+    profiles: [telemetry]
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./api/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    mem_limit: 128m
 
 volumes:
   mysql_data:
