@@ -26,7 +26,7 @@ def test_show_author_includes_articles_and_socials(client):
     assert len(body["socials"]) == 1
 
 
-def test_create_author(client):
+def test_create_author(client, admin_headers):
     payload = {
         "author": {
             "name": "New Author",
@@ -37,35 +37,52 @@ def test_create_author(client):
         }
     }
 
-    response = client.post("/authors", json=payload)
+    response = client.post("/authors", json=payload, headers=admin_headers)
 
     assert response.status_code == 201
     assert json_body(response)["name"] == "New Author"
 
 
-def test_author_validation_errors(client):
-    response = client.post("/authors", json={"author": {"name": ""}})
+def test_author_validation_errors(client, admin_headers):
+    response = client.post("/authors", json={"author": {"name": ""}}, headers=admin_headers)
 
     assert response.status_code == 422
     assert "errors" in json_body(response)
 
 
-def test_update_author(client):
+def test_update_author(client, admin_headers):
     author = AuthorFactory()
 
     response = client.patch(
         f"/authors/{author.id}",
         json={"author": {"bio": "Updated"}},
+        headers=admin_headers,
     )
 
     assert response.status_code == 200
     assert json_body(response)["bio"] == "Updated"
 
 
-def test_delete_author(client):
+def test_delete_author(client, admin_headers):
     author = AuthorFactory()
 
-    response = client.delete(f"/authors/{author.id}")
+    response = client.delete(f"/authors/{author.id}", headers=admin_headers)
 
     assert response.status_code == 204
 
+
+def test_each_request_uses_its_own_bearer_claims(client, admin_headers, author_headers):
+    # Arrange
+    author = AuthorFactory()
+
+    # Act
+    admin_response = client.patch(
+        f"/authors/{author.id}", headers=admin_headers, json={"author": {"bio": "Admin edit"}}
+    )
+    author_response = client.patch(
+        f"/authors/{author.id}", headers=author_headers, json={"author": {"bio": "Author edit"}}
+    )
+
+    # Assert
+    assert admin_response.status_code == 200
+    assert author_response.status_code == 403

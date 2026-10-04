@@ -59,19 +59,23 @@ como serviço no Compose, com volume `mysql_data`.
 | `blueprints/articles.py` | CRUD de artigos e agregação `/articles/count_by_author`; consultas e transações estão no próprio blueprint. |
 | `blueprints/authors.py` e `blueprints/socials.py` | CRUD de autores e perfis sociais. |
 | `blueprints/auth.py` | `POST /login` e `GET /admin/profile`; interpretação de Bearer token e respostas HTTP de autenticação/autorização. |
+| `blueprints/author_identities.py` | Vínculo privado `PUT/DELETE /authors/{id}/identity`, restrito a admin. |
 | `blueprints/health.py`, `metrics.py` e `tech.py` | Healthcheck, exposição de métricas e relatório técnico. |
 | `blueprints/utils.py` | Respostas JSON e erros compartilhados pelos endpoints. |
 | `models/author.py`, `article.py` e `social.py` | Entidades, colunas, relacionamentos e restrições de persistência. Autores possuem artigos e perfis sociais. |
+| `models/author_identity.py` | Tabela privada que associa um autor ao par issuer/subject, com comparação binária e sem serialização pública. |
 | `models/base.py` | Mixins de timestamps e serialização. |
 | `models/seed_run.py` | Controle de execução dos seeds pelo nome. |
 | `models/__init__.py` | Exportação e carregamento dos modelos para registro no ORM. |
 | `schemas/author.py`, `article.py` e `social.py` | Validação e serialização Marshmallow dos contratos de entrada/saída. |
 | `migrations/env.py`, `alembic.ini` e `script.py.mako` | Ambiente e estrutura das migrations Alembic/Flask-Migrate. |
+| `migrations/versions/20261004_0002_author_identities.py` | Adiciona a associação privada binária issuer/subject, mantendo a migration inicial imutável. |
 | `migrations/versions/20251130_0001_initial_schema.py` | Migration inicial do domínio. Adicionar novas migrations para evolução de banco já existente; não reescrever o histórico aplicado. |
 | `seeds/bootstrap.py` | Upsert de dados iniciais e registro `SeedRun`; pula o seed se seu nome já foi aplicado. |
 | `seeds/data.py` e `article_seed_data.json` | Dados iniciais de autor, perfis e artigos. Alterar o arquivo não reaplica automaticamente um seed já registrado. |
 | `seeds/__init__.py` | Exporta o bootstrap de seeds. |
 | `services/keycloak_client.py` | Cliente HTTP de OpenID, troca de senha por tokens, cache de discovery/JWKS, validação JWT e papéis do realm. |
+| `services/authorization.py` | Leitura de Bearer claims, verificação de papéis e resolução do autor associado para as regras de escrita. |
 | `services/tech_report.py` | Montagem do relatório HTML de runtime, banco, ambiente e dependências. |
 | `observability/metrics.py` e `observability/__init__.py` | Coleta e formatação das métricas; integração com OpenTelemetry e exposição Prometheus/OpenMetrics. |
 | `swagger/v1/swagger.yaml` | Especificação estática dos contratos HTTP; atualizar junto de mudanças de API. |
@@ -82,7 +86,9 @@ como serviço no Compose, com volume `mysql_data`.
 | `tests/services/` e `tests/seeds/` | Testes do cliente Keycloak real com HTTP simulado e do bootstrap de dados no banco de testes. |
 | `tests/test_bootstrap_command.py` | Testes do comando `bootstrap-db`, factory sem efeitos de banco e repetição segura. |
 | `tests/integration/test_compose_bootstrap.py` | Integrações MySQL/Compose opt-in para init, workers, falhas e ciclo de vida. |
+| `tests/integration/test_keycloak_authorization.py` | Prova opt-in isolada com Keycloak real para audience, papéis e autoria; usa projeto/volumes únicos. |
 | `tests/test_migrations.py` | Exercita upgrade/downgrade da migration inicial em banco temporário. |
+| `tests/test_config.py` | Verifica configuração de produção sem defaults demonstrativos. |
 
 ### UI: `ui/`
 
@@ -114,9 +120,21 @@ como serviço no Compose, com volume `mysql_data`.
 
 ### Identidade: `keycloak/`
 
-`realm-python-demo.json` define o realm importado pelo container, o cliente da API, os papéis `admin` e `author` e
-usuários de demonstração. Mudanças no modelo de autorização podem exigir alteração conjunta do realm, configuração da
-API, cliente Keycloak e testes de autenticação.
+`realm-python-demo.json` define o realm importado pelo container, o cliente da API, os papéis `admin` e `author`, o
+mapper de audience `python-demo-api` e usuários de demonstração. Importação ocorre no bootstrap do realm; não atualiza
+realm existente. A Fase 1B aceita JWT RS256 com issuer exato e audience configurada usando discovery/JWKS. Em produção,
+`KEYCLOAK_BASE_URL` é o endereço de backchannel da API e `KEYCLOAK_ISSUER` é o issuer HTTPS anunciado, que precisa ser
+alcançável conforme metadata/JWKS. O teste isolado provou hostname HTTPS público com backchannel dinâmico pela rede
+interna, sem validar um deploy de produção.
+
+Leituras permanecem públicas. Escritas em autores e perfis sociais e acesso a `/tech` exigem admin. Artigos permitem
+admin ou author com vínculo prévio issuer/subject; o servidor atribui `author_id` ao criar artigo e limita alterações
+ao próprio autor. Identificadores são armazenados em `author_identities` e omitidos do serializer público. O endpoint
+de vínculo requer admin. Configuração de produção falha se DSN ou configurações explícitas de Keycloak faltarem ou
+usarem credenciais demonstrativas. Consulte ADRs [0049](adrs/ADR-0049.md)–[0052](adrs/ADR-0052.md).
+
+Isto não atesta prontidão para produção: a UI renderiza `post_entry` via `v-html`; uma allowlist de sanitização e
+regressão de conteúdo legado/importado ainda é pré-requisito da Fase 7.
 
 ## Fluxos e contratos a preservar
 
@@ -126,8 +144,9 @@ API, cliente Keycloak e testes de autenticação.
    `flask --app app bootstrap-db` aplica migrations e seeds. No Compose, `api-init` espera o banco saudável e a API
    aguarda o sucesso do init antes de iniciar quatro workers; falha do init bloqueia a API nova.
 3. **Identidade:** `/admin` envia credenciais a `/login`; a API usa o grant de senha do Keycloak, valida o token e
-   devolve tokens/papéis. A UI guarda a sessão e consulta `/admin/profile`, que exige o papel configurado. Os CRUDs não
-   recebem proteção automaticamente por existir esse fluxo.
+   devolve tokens/papéis. A UI guarda a sessão e consulta `/admin/profile`. Nos endpoints de escrita, Bearer e papel
+   são aplicados conforme o recurso; CRUD de artigo também exige vínculo privado para autor. Leia o ADR-0049 para a
+   política e ADR-0051 para confiança issuer/audience.
 4. **Observabilidade:** hooks da aplicação registram requisições e logs; blueprints expõem `/metrics`, `/liveness` e
    `/tech`. Mudanças globais devem preservar registro de erros sem contagem duplicada.
 5. **Contrato publicado:** Swagger é um arquivo estático servido em `/openapi.yaml`, com UI em `/api-docs`; não é
@@ -190,6 +209,8 @@ a um release identificado.
   reconfigura toda a UI.
 - `ArticleView.vue` e `AboutView.vue` renderizam conteúdo do banco com `v-html`. Alterações que permitam editar esse
   conteúdo devem incluir no escopo o tratamento de HTML e as permissões de escrita.
+- Desenvolvimento mantém credenciais de demonstração; em `FLASK_ENV=production`, DSN MySQL e configuração explícita
+  Keycloak são exigidos e defaults demonstrativos são rejeitados. Isso não prova deploy real.
 - O Keycloak roda em `start-dev`; o Compose não define dependência/healthcheck dele para a API e não configura banco
   externo para o Keycloak. Sua dependência `db` não equivale a persistência no MySQL.
 - O cliente JWT desativa validação de audience (`verify_aud=False`). Alterações de autenticação precisam considerar esse
