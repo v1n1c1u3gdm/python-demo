@@ -13,8 +13,8 @@ containerizado. A raiz está organizada em dois módulos:
 
 - **API (`api/`)**: Flask 3.1 + Gunicorn, SQLAlchemy 2 com PyMySQL, migrations Alembic via Flask-Migrate, seeds
   idempotentes a partir de `seeds/article_seed_data.json` e documentação Swagger reutilizando `swagger/v1/swagger.yaml`.
-  A instrumentação usa `opentelemetry-sdk` + `opentelemetry-instrumentation-flask` para expor `GET /metrics` em
-  formato Prometheus/OpenMetrics. Logs HTTP e SQLAlchemy são gravados em `api/logs/`.
+  Métricas HTTP são expostas em formato Prometheus; a instrumentação OpenTelemetry pode exportar OTLP para o collector
+  local opcional. O exportador fica desabilitado por padrão. Logs HTTP e SQLAlchemy são gravados em `api/logs/`.
 - **UI (`ui/`)**: Vue 3 com Vite e Bootstrap 4, Build multi-stage (Node → NGINX) compartilhando o mesmo `Dockerfile`.
   Testes unitários com Vitest + Vue Test Utils 2 garantindo ≥85% de cobertura de linhas.
 - **Banco (serviço `db`)**: MySQL 8.4 em container dedicado com volume `mysql_data` e credenciais fixas (`ruby-demo` /
@@ -30,7 +30,7 @@ containerizado. A raiz está organizada em dois módulos:
 - Flask 3.1 + Gunicorn
 - SQLAlchemy 2.x + Flask-Migrate
 - MySQL 8.4 (dockerizado)
-- OpenTelemetry SDK + Prometheus/OpenMetrics
+- OpenTelemetry SDK + Prometheus; collector OTLP local opcional no perfil Compose `telemetry`
 - Vue 3, Bootstrap 4, Vite, Vitest, Vue Test Utils 2
 - Node 24 para build/testes e tooling Markdown
 - Docker 24 + Docker Compose v2
@@ -41,8 +41,12 @@ containerizado. A raiz está organizada em dois módulos:
 - `GET /openapi.yaml` – Spec OpenAPI 3.0.
 - CRUD completo para `/authors`, `/articles`, `/socials` (payloads com root keys `author`, `article`, `social`) e
   `/articles/count_by_author`.
-- `GET /liveness` – healthcheck com status e timestamp.
-- `GET /metrics` – counters/latency/liveness em OpenMetrics.
+- `GET /up` e `GET /liveness` – liveness público, independente de MySQL, Keycloak e collector; ambos retornam somente
+  `{"status":"ok"}`.
+- `GET /ready` – readiness público: `200` com `{"status":"ok"}` quando MySQL e discovery Keycloak respondem dentro
+  dos limites, ou `503` com `{"status":"unavailable"}`. O prazo global é três segundos e a capacidade de probes é limitada.
+- `GET /metrics` – métricas Prometheus protegidas por Bearer com papel `admin`; rótulos usam template de rota e `404`
+  estável para caminho não reconhecido.
 - `GET /tech` – relatório HTML (“tabelaço”) com host/runtime/banco/config/env/pacotes/licenças.
 - `GET /` – redirect para `/api-docs`.
 - `POST /login` – proxy para o Keycloak (Resource Owner Password) retornando tokens + roles.
@@ -75,6 +79,22 @@ docker compose up --build
 O bootstrap coordena apenas o init de um projeto Compose. Não há exclusão entre diferentes projetos/hosts nem entre
 execuções manuais concorrentes; mantenha essas execuções serializadas. O comando `docker compose restart api` reinicia
 os workers sem recriar o init.
+
+Para executar o bootstrap manualmente no Compose, use `docker compose run --rm api-init flask bootstrap-db`; o serviço
+de init não recebe o diretório multiprocess reservado à API Gunicorn.
+
+Para habilitar exportação OTLP no ambiente local, defina a variável que ativa o exportador e inicie também o perfil do
+collector:
+
+```bash
+OTEL_METRICS_ENABLED=true docker compose --profile telemetry up --build
+```
+
+O perfil inicia `otel-collector`, mas a exportação pela API continua desabilitada por padrão. O endpoint OTLP usa a
+rede interna do Compose, sem porta publicada no host; o prazo de exportação é de dois segundos e o intervalo é de dez
+segundos. A API e seus endpoints de saúde não dependem do collector. O teste Compose isolado confirmou recebimento OTLP
+por workers distintos e serving durante a queda do collector; isso não comprova instalação ou capacidade na VPS. O
+status local e os limites da validação constam no [roadmap](ROADMAP.md).
 
 ### Atualizar imagem ou schema
 
@@ -118,6 +138,10 @@ seguros.
 | `KEYCLOAK_AUDIENCE` | `python-demo-api` | Audience que o access token deve conter. |
 | `KEYCLOAK_ADMIN_ROLE` | `admin` | Papel necessário para acessar `/admin/profile`. |
 | `KEYCLOAK_AUTHOR_ROLE` | `author` | Papel de autor para escrita nos próprios artigos, após vínculo privado. |
+| `OTEL_METRICS_ENABLED` | `false` | Habilita exportação periódica de métricas OTLP da API; requer iniciar também o perfil Compose `telemetry`. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | `http://otel-collector:4318/v1/metrics` | Endpoint HTTP interno do collector no Compose. |
+| `OTEL_EXPORT_INTERVAL_MS` | `10000` | Intervalo de exportação OTLP em milissegundos. |
+| `OTEL_EXPORT_TIMEOUT_SECONDS` | `2` | Timeout máximo de exportação OTLP. |
 
 ### Vínculo de autor e configuração de produção (Fase 1B)
 
@@ -144,10 +168,14 @@ autor existente por `PUT /authors/{id}/identity` com `{ "identity": { "issuer": 
 `DELETE` no mesmo recurso revoga o vínculo. Esses campos não aparecem no modelo público do autor. Autores não vinculados
 não podem escrever e não escolhem `author_id` no payload de artigo.
 
-Esta configuração não conclui a implantação de produção. O HTML de artigo ainda é exibido pela UI com `v-html`;
-sanitização por allowlist, incluindo conteúdo legado/importado, precisa anteceder exposição pública de conteúdo não
-confiável (Fase 7). Deploy, cofre de produção, observabilidade entre workers e hardening operacional continuam
-pendentes no [roadmap](ROADMAP.md).
+Esta configuração não conclui a implantação de produção. Artigos e biografias passam pela allowlist HTML na escrita e
+na serialização pública; conteúdo legado é filtrado na leitura sem reescrita automática do banco. Somente admin pode
+ativar o bypass de conteúdo bruto confiável. Na UI, o controle existente é um checkbox de bypass por artigo com ação
+explícita `Salvar`; não há editor WYSIWYG nem CRUD editorial completo. O CRUD/editor permanece planejado na Fase 7.
+A validação local isolada confirmou a sanitização e bypass, a observabilidade dos quatro workers e o exportador OTLP,
+incluindo continuidade de serving durante queda do collector. Isso não representa deploy nem prova capacidade na VPS.
+Deploy e cofre de produção continuam pendentes no [roadmap](ROADMAP.md); collector OTLP segue opcional e não é
+dependência de serving.
 
 ### Autenticação Keycloak & área `/admin`
 

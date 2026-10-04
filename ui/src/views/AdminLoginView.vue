@@ -90,6 +90,78 @@
           </div>
         </article>
 
+        <article
+          v-if="isAuthenticated && isAdmin"
+          class="admin-articles"
+          aria-labelledby="admin-articles-title"
+        >
+          <h3 id="admin-articles-title">
+            HTML bruto dos artigos
+          </h3>
+          <p>O bypass permite que o HTML do artigo seja publicado sem sanitização.</p>
+          <label for="admin-article-select">Artigo existente</label>
+          <select
+            id="admin-article-select"
+            v-model="selectedArticleId"
+            aria-label="Artigo existente"
+            :disabled="isArticlesLoading || isBypassSaving || adminArticles.length === 0"
+            @change="selectArticle"
+          >
+            <option value="">
+              Selecione um artigo
+            </option>
+            <option
+              v-for="article in adminArticles"
+              :key="article.id"
+              :value="String(article.id)"
+            >
+              {{ article.title }}
+            </option>
+          </select>
+          <p
+            v-if="isArticlesLoading"
+            role="status"
+          >
+            Carregando artigos...
+          </p>
+          <p
+            v-else-if="adminArticles.length === 0"
+            role="status"
+          >
+            Nenhum artigo disponível.
+          </p>
+
+          <div
+            v-if="selectedArticle"
+            class="admin-articles__bypass"
+          >
+            <label for="article-bypass-sanitization">
+              <input
+                id="article-bypass-sanitization"
+                v-model="draftBypassSanitization"
+                type="checkbox"
+                :disabled="isBypassSaving"
+              >
+              Permitir HTML sem sanitização
+            </label>
+            <button
+              class="btn"
+              type="button"
+              aria-label="Salvar bypass de sanitização"
+              :disabled="isBypassSaving || draftBypassSanitization === selectedArticle.bypass_sanitization"
+              @click="saveArticleBypass"
+            >
+              {{ isBypassSaving ? 'Salvando...' : 'Salvar' }}
+            </button>
+          </div>
+          <p
+            v-if="bypassStatus"
+            role="status"
+          >
+            {{ bypassStatus }}
+          </p>
+        </article>
+
         <p
           v-if="errorMessage"
           class="admin-login__error"
@@ -133,6 +205,7 @@ import {
   fetchAdminProfile,
   clearSession
 } from '@/services/authService'
+import { fetchArticles, updateArticleSanitizationBypass } from '@/services/articlesService'
 
 export default {
   name: 'AdminLoginView',
@@ -149,12 +222,25 @@ export default {
       profile: null,
       isSubmitting: false,
       isProfileLoading: false,
-      errorMessage: null
+      errorMessage: null,
+      adminArticles: [],
+      selectedArticleId: '',
+      draftBypassSanitization: false,
+      isArticlesLoading: false,
+      isBypassSaving: false,
+      bypassStatus: null,
+      bypassOperation: 0
     }
   },
   computed: {
     isAuthenticated() {
       return Boolean(this.session?.access_token)
+    },
+    isAdmin() {
+      return Boolean(this.session?.roles?.includes('admin'))
+    },
+    selectedArticle() {
+      return this.adminArticles.find(article => String(article.id) === this.selectedArticleId) || null
     }
   },
   created() {
@@ -162,6 +248,7 @@ export default {
     if (storedSession) {
       this.session = storedSession
       this.loadProfile()
+      if (this.isAdmin) this.loadAdminArticles()
     }
   },
   methods: {
@@ -177,6 +264,7 @@ export default {
         this.credentials.username = ''
         this.credentials.password = ''
         await this.loadProfile()
+        if (this.isAdmin) await this.loadAdminArticles()
       } catch (error) {
         this.errorMessage = error?.message || 'Autenticação falhou.'
       } finally {
@@ -196,10 +284,70 @@ export default {
         this.isProfileLoading = false
       }
     },
+    async loadAdminArticles() {
+      if (!this.isAdmin || !this.session?.access_token) return
+      const token = this.session.access_token
+      const operation = this.bypassOperation
+      this.isArticlesLoading = true
+
+      try {
+        const articles = await fetchArticles({ force: true })
+        if (operation === this.bypassOperation && this.session?.access_token === token && this.isAdmin) {
+          this.adminArticles = articles
+        }
+      } catch (error) {
+        if (operation === this.bypassOperation && this.session?.access_token === token) {
+          this.errorMessage = error?.message || 'Não foi possível carregar os artigos.'
+        }
+      } finally {
+        if (operation === this.bypassOperation) this.isArticlesLoading = false
+      }
+    },
+    selectArticle() {
+      this.errorMessage = null
+      this.bypassStatus = null
+      this.draftBypassSanitization = Boolean(this.selectedArticle?.bypass_sanitization)
+    },
+    async saveArticleBypass() {
+      if (!this.isAdmin || !this.selectedArticle || !this.session?.access_token || this.isBypassSaving) return
+      const articleId = this.selectedArticle.id
+      const token = this.session.access_token
+      const operation = this.bypassOperation
+      this.errorMessage = null
+      this.bypassStatus = null
+      this.isBypassSaving = true
+
+      try {
+        const updatedArticle = await updateArticleSanitizationBypass(
+          articleId,
+          this.draftBypassSanitization,
+          token
+        )
+        if (operation !== this.bypassOperation || this.session?.access_token !== token) return
+        this.adminArticles = this.adminArticles.map(article =>
+          article.id === articleId ? updatedArticle : article
+        )
+        this.draftBypassSanitization = Boolean(updatedArticle.bypass_sanitization)
+        this.bypassStatus = 'Bypass atualizado.'
+      } catch (error) {
+        if (operation !== this.bypassOperation || this.session?.access_token !== token) return
+        this.draftBypassSanitization = Boolean(this.selectedArticle?.bypass_sanitization)
+        this.errorMessage = error?.message || 'Não foi possível atualizar o bypass.'
+      } finally {
+        if (operation === this.bypassOperation) this.isBypassSaving = false
+      }
+    },
     handleLogout() {
+      this.bypassOperation += 1
       clearSession()
       this.session = null
       this.profile = null
+      this.adminArticles = []
+      this.selectedArticleId = ''
+      this.draftBypassSanitization = false
+      this.isArticlesLoading = false
+      this.isBypassSaving = false
+      this.bypassStatus = null
       this.errorMessage = null
     }
   }
@@ -316,5 +464,41 @@ export default {
   font-size: 1rem;
   font-weight: 600;
 }
-</style>
 
+.admin-articles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--lighter);
+  border-radius: 1rem;
+  background: var(--white);
+}
+
+.admin-articles h3,
+.admin-articles p {
+  margin-bottom: 0;
+}
+
+.admin-articles select {
+  border: 1px solid var(--gray-2);
+  border-radius: 4px;
+  padding: 0.6rem;
+}
+
+.admin-articles__bypass {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.admin-articles__bypass label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+</style>

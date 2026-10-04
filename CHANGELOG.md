@@ -9,6 +9,14 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Sanitização allowlist de HTML em artigos e biografias na escrita e leitura pública, com bypass de HTML bruto exclusivo
+  para administração e controles mínimos por artigo na área admin. Quatro cenários da integração isolada passaram.
+- Endpoints públicos de liveness (`/up` e `/liveness`) e readiness (`/ready`) com verificação limitada de MySQL e
+  discovery Keycloak; métricas Prometheus multiprocess e exportador OTLP local opcional no perfil `telemetry`. A
+  integração isolada validou quatro workers, ciclo de vida, recepção OTLP e continuidade de serving durante queda do
+  collector; não comprova implantação ou capacidade de produção na VPS.
+- ADRs 0053–0057 registram as políticas aprovadas de sanitização, bypass, saúde, métricas multiprocess e exportação
+  OTLP opcional; ADR-0056 substitui a exposição Prometheus por snapshots registrada no ADR-0014.
 - Autorização por recurso com identidade Keycloak privada de autor, CRUD de artigos por proprietário/admin, configuração
   explícita de produção e validação obrigatória de issuer/audience; integração opt-in com Keycloak real e mapper de
   audience no realm de demonstração.

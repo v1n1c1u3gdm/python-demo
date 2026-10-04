@@ -103,29 +103,32 @@ sucesso antes de iniciar. Consulte [ADR-0048](adrs/ADR-0048.md), [README](README
 e a especificação local `docs/superpowers/specs/2026-10-03-single-bootstrap-design.md`.
 
 **Decisões pendentes:** integração de deploy, mecanismo de segredos de runtime e operação de produção pertencem às
-Fases 5–6. Embora a API exija credenciais explícitas, implantação em produção permanece pendente e a UI ainda renderiza
-HTML de artigos com `v-html`; sanitização da allowlist na Fase 7 é bloqueadora antes de expor conteúdo não confiável.
+Fases 5–6. Embora a API exija credenciais explícitas, implantação em produção permanece pendente. A política aprovada
+de sanitização HTML e bypass administrativo foi validada localmente na API, UI e integração isolada. O CRUD/editor
+editorial continua planejado na Fase 7.
 
 ## Fase 2 — Saúde e observabilidade operacional
 
-**Status:** Planejada
+**Status:** Concluída localmente; sem implantação em produção.
 
-**Escopo:** distinguir liveness de readiness: `/up` confirma processo responsivo; preservar `/liveness` por
-compatibilidade e `/ready` valida dependências
-essenciais com timeouts limitados. Disponibilizar `/metrics` de forma consistente em todos os workers e avaliar
-exportação OpenTelemetry por collector local. O snapshot atual por processo é descrito no ADR-0014; discutir sua
-evolução para métricas consistentes entre workers,
-sem presumir agregação existente.
+**Escopo:** distinguir liveness de readiness: `/up` e `/liveness` são públicos e independentes de dependências; `/ready`
+verifica MySQL e discovery Keycloak com prazo global limitado. `/metrics` exige admin e usa agregação Prometheus
+multiprocess com labels de rota estáveis. A exportação OTLP para collector local é opcional e não pode ser dependência
+de serving. Os contratos foram aprovados e registrados nos [ADRs 0055](adrs/ADR-0055.md)–[0057](adrs/ADR-0057.md).
+Testes isolados da API/Compose validaram liveness/readiness, agregação e ciclo de vida dos quatro workers, recepção OTLP
+com identidades distintas e continuidade durante queda do collector. Esta validação local não comprova deploy ou
+capacidade de produção na VPS.
 
-**Dependências:** Fase 1 para conexão e configuração estáveis; decisões de métricas e retenção compatíveis com
+**Dependências:** Fase 1 para conexão e configuração estáveis; validar os limites de métricas e telemetria com o
 orçamento medido na Fase 0.
 
-**Critério verificável:** teste automatizado demonstra que liveness não depende do banco, readiness sinaliza falha e
-recuperação do banco dentro do limite configurado, e métricas agregam requisições entre workers sem duplicação;
-collector, se aceito, recebe telemetria local sem serviço externo.
+**Critério verificável:** atendido localmente. Testes demonstram liveness independente do banco, readiness sinaliza falha
+e recuperação dentro do limite de três segundos, e a integração isolada confirma métricas agregadas entre quatro
+workers, ciclo de vida, labels limitados, recepção OTLP por worker e continuidade de serving com collector indisponível.
 
-**Decisões pendentes:** conteúdo e proteção de métricas, limites de cardinalidade/retenção e adoção/configuração do
-collector. Criar ou atualizar ADR somente após acordo.
+**Decisões pendentes:** avaliação do custo operacional sob o orçamento total da VPS e decisões de deploy/serving de
+produção das Fases 5–6. Proteção, cardinalidade, limites de readiness, ciclo de vida Prometheus multiprocess e
+parâmetros do collector já estão aprovados e validados localmente.
 
 ## Fase 3 — Pipeline reproduzível e gates de qualidade
 
@@ -219,27 +222,31 @@ registram as escolhas já alinhadas, sem antecipar a implementação.
 
 ## Fase 7 — CRUD editorial com autorização e segurança HTML
 
-**Status:** Planejada
+**Status:** Planejada.
 
-**Escopo:** permitir CRUD de artigos em UI autenticada, com editor WYSIWYG utilizável por pessoas, toolbar clara e sem
-exigir edição de HTML bruto. Preservar tags, autor e slug existentes; tratar colisão/invalidez do slug, invalidação de
-cache e confirmação de exclusão. A API mantém leitura pública e exige autorização explícita nas escritas, com
-respostas 401/403 corretas. Sanitizar HTML por allowlist no servidor e definir tratamento para conteúdo
-histórico/importado, considerando que a UI atual usa `v-html`.
+Sanitização e bypass foram implementados e validados localmente como pré-requisito desta fase. A validação não conclui a
+Fase 7: CRUD/editor continua planejado.
+
+**Escopo implementado e validado localmente nesta etapa:** sanitizar artigos e biografias por allowlist na escrita e na
+serialização pública sem reescrever linhas legadas; restringir bypass explícito a admin e limpar o conteúdo ao revogar.
+Ao autor editar o corpo, limpar bypass e sanitizar; em atualizações somente de metadados, preservar bypass existente.
+A UI contém apenas checkbox de bypass por artigo com ação explícita `Salvar`. A política está registrada nos
+[ADRs 0053](adrs/ADR-0053.md) e [0054](adrs/ADR-0054.md).
+
+**Escopo ainda planejado:** CRUD editorial de artigos em UI autenticada, editor WYSIWYG, tratamento de slug e
+confirmação de exclusão. A API já tem autorização para leitura pública e escrita administrativa/autoral definida na
+Fase 1B.
 
 **Dependências:** política de papéis definida na Fase 1; testes E2E e segurança das Fases 3–4; decisões de editor e
 contrato aprovadas antes da implementação.
 
-**Critério verificável:** testes API/UI/E2E cobrem criar, editar, ler publicamente e excluir com confirmação; usuário
-sem autenticação recebe 401, autenticado sem papel recebe 403; usuário autorizado consegue editar; conflito de slug é
-explicado sem sobrescrever; o HTML em `post_entry` passa pela allowlist e conteúdo legítimo mantém tags/autor/slug;
-conteúdo histórico/importado ganha teste de regressão; falha não apaga nem corrompe silenciosamente o conteúdo.
+**Critério verificável restante:** testes de UI/E2E cobrem CRUD editorial, autoria, exclusão confirmada e conflitos de
+slug. Os critérios de sanitização e bypass da API/UI, preservação do HTML legado no banco e limpeza ao revogar já foram
+validados na integração local desta etapa.
 
-**Decisões pendentes:** modelo de papéis e escopo (incluindo 401/403); editor entre Jodit (MIT) e CKEditor 5 (GPL,
-verificar obrigações da licença e integração); política de HTML histórico/importado e allowlist; definição de
-exclusão física versus lixeira ("apagar" e "deletar" representam a mesma operação no escopo atual); lixeira,
-rascunhos e uploads ficam fora do escopo inicial salvo novo
-alinhamento.
+**Decisões pendentes:** escolha de editor visual e licença; fluxo completo de CRUD editorial, tratamento de conflitos de
+slug e confirmação de exclusão. Lixeira, rascunhos, uploads, edição de biografia na UI e HTML bruto por autores não
+fazem parte do escopo aprovado atual.
 
 ## Fase 8 — Documentação de operação
 

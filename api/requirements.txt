@@ -10,7 +10,9 @@ factory-boy==3.3.3
 flask-swagger-ui==5.33.0
 gunicorn==26.2.0
 marshmallow==4.3.1
+nh3==0.3.7
 opentelemetry-api==1.45.0
+opentelemetry-exporter-otlp==1.45.0
 opentelemetry-instrumentation-flask==0.66b0
 opentelemetry-sdk==1.45.0
 prometheus-client==0.26.0

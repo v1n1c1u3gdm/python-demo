@@ -12,6 +12,7 @@ class Author(SerializerMixin, TimestampMixin, db.Model):
     photo_url = db.Column(db.String(512), nullable=False)
     public_key = db.Column(db.Text, nullable=False)
     bio = db.Column(db.Text, nullable=False)
+    bypass_sanitization = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     identity = db.relationship(
         "AuthorIdentity",
@@ -31,4 +32,3 @@ class Author(SerializerMixin, TimestampMixin, db.Model):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-

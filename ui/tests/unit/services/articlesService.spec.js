@@ -3,7 +3,8 @@ import {
   fetchArticles,
   fetchArticleBySlug,
   buildArticleUrl,
-  clearArticlesCache
+  clearArticlesCache,
+  updateArticleSanitizationBypass
 } from '@/services/articlesService'
 import { makeArticles } from '../factories/articles'
 import { createFetchResponse, mockFetchError, mockFetchResponse, createDeferred } from '../mocks/fetchMock'
@@ -89,5 +90,72 @@ describe('articlesService', () => {
 
     // Assert
     expect(buildUrlWithCustomEnvironment('slug')).toBe('https://example.com/blog/slug/')
+  })
+
+  it('patches only the sanitization bypass with the admin token and refreshes cached articles', async () => {
+    // Arrange
+    mockFetchResponse(makeArticles(1, () => ({ id: 14, bypass_sanitization: false })))
+    await fetchArticles()
+    const updatedArticle = makeArticles(1, () => ({ id: 14, bypass_sanitization: true }))[0]
+    mockFetchResponse(updatedArticle)
+
+    // Act
+    const result = await updateArticleSanitizationBypass(14, true, 'admin-token')
+
+    // Assert
+    expect(global.fetch).toHaveBeenNthCalledWith(2, 'http://localhost:3000/articles/14', {
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer admin-token'
+      },
+      method: 'PATCH',
+      body: JSON.stringify({ article: { bypass_sanitization: true } })
+    })
+    expect(result).toEqual(updatedArticle)
+
+    const refreshedArticles = makeArticles(1, () => ({ id: 14, bypass_sanitization: true }))
+    mockFetchResponse(refreshedArticles)
+    await expect(fetchArticles()).resolves.toEqual(refreshedArticles)
+    expect(global.fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps cached articles when bypass update fails', async () => {
+    // Arrange
+    const cachedArticles = makeArticles(1, () => ({ id: 14, bypass_sanitization: false }))
+    mockFetchResponse(cachedArticles)
+    await fetchArticles()
+    mockFetchError({ status: 403, body: { message: 'Forbidden' } })
+
+    // Act
+    await expect(updateArticleSanitizationBypass(14, true, 'author-token')).rejects.toThrow('Forbidden')
+
+    // Assert
+    await expect(fetchArticles()).resolves.toBe(cachedArticles)
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not let an older in-flight article read overwrite the cache after a bypass update', async () => {
+    // Arrange
+    const staleRead = createDeferred()
+    global.fetch.mockReturnValueOnce(staleRead.promise)
+    const oldRequest = fetchArticles()
+    const updatedArticle = makeArticles(1, () => ({ id: 14, bypass_sanitization: true }))[0]
+    mockFetchResponse(updatedArticle)
+    await updateArticleSanitizationBypass(14, true, 'admin-token')
+    const freshArticles = makeArticles(1, () => ({ id: 14, bypass_sanitization: true }))
+    mockFetchResponse(freshArticles)
+    await fetchArticles()
+
+    // Act
+    staleRead.resolve(createFetchResponse({
+      jsonData: makeArticles(1, () => ({ id: 14, bypass_sanitization: false }))
+    }))
+    await oldRequest
+    const cachedArticles = await fetchArticles()
+
+    // Assert
+    expect(cachedArticles).toEqual(freshArticles)
+    expect(global.fetch).toHaveBeenCalledTimes(3)
   })
 })

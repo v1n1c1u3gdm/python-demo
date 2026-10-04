@@ -74,7 +74,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AuthorInput'
+              $ref: '#/components/schemas/AuthorPatchInput'
       responses:
         '200':
           description: Autor atualizado
@@ -331,6 +331,74 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /up:
+    get:
+      tags:
+        - Health
+      summary: Verifica liveness do processo
+      description: Endpoint público, independente de MySQL, Keycloak e collector.
+      responses:
+        '200':
+          description: Processo ativo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /liveness:
+    get:
+      tags:
+        - Health
+      summary: Verifica liveness do processo (compatibilidade)
+      description: Endpoint público, independente de MySQL, Keycloak e collector.
+      responses:
+        '200':
+          description: Processo ativo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /ready:
+    get:
+      tags:
+        - Health
+      summary: Verifica prontidão das dependências
+      description: >-
+        Endpoint público. Verifica MySQL e discovery Keycloak com prazo global de três segundos e capacidade limitada
+        para probes em andamento. Não inclui detalhes de dependências na resposta.
+      responses:
+        '200':
+          description: Dependências disponíveis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Uma ou mais dependências indisponíveis ou timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthUnavailable'
+  /metrics:
+    get:
+      tags:
+        - Administration
+      summary: Exporta métricas Prometheus
+      description: >-
+        Requer Bearer válido com papel admin. A agregação multiprocess combina workers da instância; labels usam
+        templates de rota e o valor estável 404 para caminhos sem rota. OpenTelemetry é uma instrumentação separada.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Métricas em texto no formato Prometheus
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /tech:
     get:
       tags:
@@ -370,7 +438,10 @@ paths:
       tags:
         - Articles
       summary: Atualiza um artigo
-      description: Requer Bearer válido com papel admin ou o autor vinculado ao artigo.
+      description: >-
+        Requer Bearer válido com papel admin ou o autor vinculado ao artigo. Autor não pode enviar
+        bypass_sanitization (nem mesmo false) e recebe 422; ao alterar post_entry, o servidor limpa eventual bypass e
+        sanitiza o novo conteúdo. Alterações apenas de metadados preservam o bypass previamente autorizado por admin.
       security:
         - BearerAuth: []
       requestBody:
@@ -434,6 +505,20 @@ components:
     Unprocessable:
       description: A entidade enviada é inválida
   schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    HealthUnavailable:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [unavailable]
     Author:
       type: object
       properties:
@@ -449,6 +534,12 @@ components:
           format: uri
         public_key:
           type: string
+        bio:
+          type: string
+          description: HTML sanitizado na leitura, exceto quando bypass_sanitization está ativo.
+        bypass_sanitization:
+          type: boolean
+          description: Indica que o conteúdo bruto foi explicitamente autorizado por admin.
         socials:
           type: array
           items:
@@ -473,6 +564,7 @@ components:
             - birthdate
             - photo_url
             - public_key
+            - bio
           properties:
             name:
               type: string
@@ -484,6 +576,33 @@ components:
               format: uri
             public_key:
               type: string
+            bio:
+              type: string
+            bypass_sanitization:
+              type: boolean
+              description: Opcional e exclusivo de admin; true armazena e expõe a biografia como HTML bruto confiável.
+    AuthorPatchInput:
+      type: object
+      properties:
+        author:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            birthdate:
+              type: string
+              format: date
+            photo_url:
+              type: string
+              format: uri
+            public_key:
+              type: string
+            bio:
+              type: string
+            bypass_sanitization:
+              type: boolean
+              description: Opcional e exclusivo de admin; true armazena e expõe a biografia como HTML bruto confiável.
     Social:
       type: object
       properties:
@@ -537,6 +656,10 @@ components:
           type: string
         post_entry:
           type: string
+          description: HTML sanitizado na leitura, exceto quando bypass_sanitization está ativo.
+        bypass_sanitization:
+          type: boolean
+          description: Indica que o conteúdo bruto foi explicitamente autorizado por admin.
         tags:
           type: array
           items:
@@ -570,6 +693,9 @@ components:
           type: string
         post_entry:
           type: string
+        bypass_sanitization:
+          type: boolean
+          description: Opcional e exclusivo de admin; autores não podem enviar esta propriedade.
         tags:
           type: array
           items:
@@ -614,6 +740,11 @@ components:
                 type: string
             author_id:
               type: integer
+            bypass_sanitization:
+              type: boolean
+              description: >-
+                Opcional e exclusivo de admin. Autores não podem enviar esta propriedade. O valor true armazena e
+                expõe HTML bruto confiável; omissão ou false aplica a allowlist.
     ArticlesCountByAuthor:
       type: object
       properties:

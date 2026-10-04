@@ -13,6 +13,7 @@ from services.authorization import (
     has_role,
     require_author_identity,
 )
+from services.html_sanitizer import sanitize_html
 
 from .utils import error_response, to_json
 
@@ -50,9 +51,14 @@ def create_article():
     payload = _load_article_payload(
         allow_missing_author=not is_admin,
         reject_author_id=not is_admin,
+        reject_bypass=not is_admin,
     )
     if not is_admin:
         payload["author_id"] = author_id
+        payload["bypass_sanitization"] = False
+    if payload.get("bypass_sanitization") is not True:
+        payload["bypass_sanitization"] = False
+        payload["post_entry"] = sanitize_html(payload["post_entry"])
     _ensure_author_exists(payload["author_id"])
 
     article = Article(**payload)
@@ -71,10 +77,23 @@ def update_article(article_id: int):
     if not is_admin and article.author_id != author_id:
         raise AuthorizationError("Insufficient permissions.", 403)
 
-    payload = _load_article_payload(partial=True, reject_author_id=not is_admin)
+    payload = _load_article_payload(
+        partial=True,
+        reject_author_id=not is_admin,
+        reject_bypass=not is_admin,
+    )
 
     if "author_id" in payload:
         _ensure_author_exists(payload["author_id"])
+
+    if not is_admin and "post_entry" in payload:
+        payload["bypass_sanitization"] = False
+        payload["post_entry"] = sanitize_html(payload["post_entry"])
+    elif is_admin:
+        next_bypass = payload.get("bypass_sanitization", article.bypass_sanitization)
+        if not next_bypass:
+            post_entry = payload.get("post_entry", article.post_entry)
+            payload["post_entry"] = sanitize_html(post_entry)
 
     for key, value in payload.items():
         setattr(article, key, value)
@@ -126,6 +145,7 @@ def _load_article_payload(
     *,
     allow_missing_author: bool = False,
     reject_author_id: bool = False,
+    reject_bypass: bool = False,
 ):
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
@@ -135,6 +155,8 @@ def _load_article_payload(
         raise ValidationError({"article": ["é obrigatório"]})
     if reject_author_id and "author_id" in article_data:
         raise ValidationError({"author_id": ["não pode ser informado pelo autor"]})
+    if reject_bypass and "bypass_sanitization" in article_data:
+        raise ValidationError({"bypass_sanitization": ["não pode ser informado pelo autor"]})
 
     schema_partial = partial or (("author_id",) if allow_missing_author else False)
     schema = ArticleSchema(partial=schema_partial)

@@ -23,7 +23,7 @@ COPY api/ .
 RUN mkdir -p /app/api/logs
 
 EXPOSE 3000
-CMD ["gunicorn", "-b", "0.0.0.0:3000", "-w", "4", "--threads", "4", "app:app"]
+CMD ["/app/api/scripts/start-gunicorn.sh", "--config", "/app/api/gunicorn.conf.py", "-b", "0.0.0.0:3000", "-w", "4", "--threads", "4", "app:app"]
 
 # -------- Vue build stage --------
 FROM node:24-alpine AS ui-build

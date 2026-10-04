@@ -14,6 +14,7 @@ class Article(SerializerMixin, TimestampMixin, db.Model):
     slug = db.Column(db.String(255), nullable=False, unique=True)
     published_label = db.Column(db.String(255), nullable=False)
     post_entry = db.Column(db.Text, nullable=False)
+    bypass_sanitization = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     tags = db.Column(db.JSON, nullable=False, default=list)
     author_id = db.Column(db.Integer, db.ForeignKey("authors.id", ondelete="CASCADE"), nullable=False)
 
@@ -32,4 +33,3 @@ class Article(SerializerMixin, TimestampMixin, db.Model):
 def ensure_tags_list(article, _):
     if article.tags is None:
         article.tags = []
-

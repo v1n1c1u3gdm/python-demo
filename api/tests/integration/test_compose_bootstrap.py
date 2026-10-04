@@ -216,7 +216,7 @@ with app.app_context():
     author = Author.query.first()
     print(json.dumps({"revision": revision, "seed_count": seed_count, "author_name": author.name, "author_bio": author.bio}))
 """
-        result = self.run("run", "--rm", "--no-deps", "api", "python", "-c", script)
+        result = self.run("run", "--rm", "--no-deps", "api-init", "python", "-c", script)
         return json.loads(result.stdout.strip().splitlines()[-1])
 
     def set_author_bio(self, bio: str) -> None:
@@ -228,7 +228,7 @@ app = create_app()
 with app.app_context():
     author = Author.query.first()
     author.bio = """ + repr(bio) + "\n    db.session.commit()\n"
-        self.run("run", "--rm", "--no-deps", "api", "python", "-c", script)
+        self.run("run", "--rm", "--no-deps", "api-init", "python", "-c", script)
 
     def worker_count(self) -> int:
         container_id = self.container_id("api")

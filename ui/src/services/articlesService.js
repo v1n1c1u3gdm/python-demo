@@ -8,6 +8,7 @@ const ARTICLE_PUBLIC_BASE_URL = normalizePublicBaseUrl(
 
 let articlesCache = null
 let inflightRequest = null
+let articlesCacheGeneration = 0
 
 function normalizeArticlesUrl(url) {
   if (!url) return DEFAULT_ARTICLES_URL
@@ -21,11 +22,11 @@ function normalizePublicBaseUrl(url) {
 
 async function request(url, fetchOptions = {}) {
   const response = await fetch(url, {
+    ...fetchOptions,
     headers: {
       Accept: 'application/json',
       ...(fetchOptions.headers || {})
-    },
-    ...fetchOptions
+    }
   })
 
   if (!response.ok) {
@@ -56,12 +57,19 @@ export async function fetchArticles(options = { force: false }) {
     return inflightRequest
   }
 
-  inflightRequest = request(ARTICLES_ENDPOINT)
+  const requestGeneration = articlesCacheGeneration
+  const currentRequest = request(ARTICLES_ENDPOINT)
+  inflightRequest = currentRequest
   try {
-    articlesCache = await inflightRequest
-    return articlesCache
+    const articles = await currentRequest
+    if (requestGeneration === articlesCacheGeneration) {
+      articlesCache = articles
+    }
+    return articles
   } finally {
-    inflightRequest = null
+    if (inflightRequest === currentRequest) {
+      inflightRequest = null
+    }
   }
 }
 
@@ -74,7 +82,22 @@ export async function fetchArticleBySlug(slug) {
   return articles.find(article => article.slug === slug)
 }
 
+export async function updateArticleSanitizationBypass(articleId, enabled, token) {
+  const payload = await request(`${ARTICLES_ENDPOINT}/${articleId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ article: { bypass_sanitization: enabled } })
+  })
+
+  clearArticlesCache()
+  return payload
+}
+
 export function clearArticlesCache() {
+  articlesCacheGeneration += 1
   articlesCache = null
   inflightRequest = null
 }
@@ -85,4 +108,3 @@ export function buildArticleUrl(slug) {
   if (!sanitizedSlug) return null
   return `${ARTICLE_PUBLIC_BASE_URL}/${sanitizedSlug}/`
 }
-

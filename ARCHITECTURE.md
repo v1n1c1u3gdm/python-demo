@@ -35,7 +35,7 @@ como serviço no Compose, com volume `mysql_data`.
 | `CHANGELOG.md` | Mudanças para pessoas; distingue alterações pendentes de histórico reconstruído. |
 | `adrs/` | Decisões numeradas e cumulativas, com evidências, contexto e consequências. |
 | `Dockerfile` | Estágios `api-app`, `ui-build` e `ui-app`; Python 3.14.7, build Node 24 e runtime NGINX. |
-| `docker-compose.yml` | Serviços `api`, `api-init`, `ui`, `db` e `keycloak`, portas, ambiente, dependências e volumes. |
+| `docker-compose.yml` | Serviços `api`, `api-init`, `ui`, `db` e `keycloak`; collector OTLP opcional no perfil `telemetry`, sem porta publicada no host. |
 | `LICENSE` | Licença MIT atual. |
 | `.dockerignore` | Evita enviar dependências, planos locais e artefatos gerados ao contexto Docker. |
 | `.gitignore` | Exclusões de dependências, ambientes, artefatos gerados e planos/specs locais em `docs/`. |
@@ -50,7 +50,7 @@ como serviço no Compose, com volume `mysql_data`.
 | --- | --- |
 | `app.py` | Factory `create_app()` sem efeitos de banco, instância WSGI `app`, registro de extensões, CORS, Swagger, hooks HTTP e erros. Alterar para comportamento transversal ou registro de integração. |
 | `bootstrap.py` | Comando Flask `bootstrap-db`, que aplica migrations e seeds explicitamente antes de servir requisições. |
-| `config.py` | Configuração por ambiente, banco, logs, Swagger e Keycloak. `TestConfig` usa SQLite em memória por padrão. |
+| `config.py` | Configuração por ambiente, banco, logs, Swagger, Keycloak e exportação OTLP opcional. `TestConfig` usa SQLite em memória por padrão. |
 | `extensions.py` | Instâncias compartilhadas de SQLAlchemy e Flask-Migrate. |
 | `requirements.txt` e `requirements-dev.txt` | Dependências Python fixadas; o arquivo de desenvolvimento inclui pytest-cov e Ruff. |
 | `pyproject.toml` | Configuração Ruff e cobertura de linhas de toda a produção Python, incluindo migrations. |
@@ -60,9 +60,9 @@ como serviço no Compose, com volume `mysql_data`.
 | `blueprints/authors.py` e `blueprints/socials.py` | CRUD de autores e perfis sociais. |
 | `blueprints/auth.py` | `POST /login` e `GET /admin/profile`; interpretação de Bearer token e respostas HTTP de autenticação/autorização. |
 | `blueprints/author_identities.py` | Vínculo privado `PUT/DELETE /authors/{id}/identity`, restrito a admin. |
-| `blueprints/health.py`, `metrics.py` e `tech.py` | Healthcheck, exposição de métricas e relatório técnico. |
+| `blueprints/health.py`, `metrics.py` e `tech.py` | Liveness `/up` e `/liveness`, readiness limitada `/ready`, métricas Prometheus protegidas por admin e relatório técnico. |
 | `blueprints/utils.py` | Respostas JSON e erros compartilhados pelos endpoints. |
-| `models/author.py`, `article.py` e `social.py` | Entidades, colunas, relacionamentos e restrições de persistência. Autores possuem artigos e perfis sociais. |
+| `models/author.py`, `article.py` e `social.py` | Entidades, colunas, relacionamentos e restrições de persistência. Autores e artigos têm flags de bypass HTML; autores possuem artigos e perfis sociais. |
 | `models/author_identity.py` | Tabela privada que associa um autor ao par issuer/subject, com comparação binária e sem serialização pública. |
 | `models/base.py` | Mixins de timestamps e serialização. |
 | `models/seed_run.py` | Controle de execução dos seeds pelo nome. |
@@ -70,6 +70,7 @@ como serviço no Compose, com volume `mysql_data`.
 | `schemas/author.py`, `article.py` e `social.py` | Validação e serialização Marshmallow dos contratos de entrada/saída. |
 | `migrations/env.py`, `alembic.ini` e `script.py.mako` | Ambiente e estrutura das migrations Alembic/Flask-Migrate. |
 | `migrations/versions/20261004_0002_author_identities.py` | Adiciona a associação privada binária issuer/subject, mantendo a migration inicial imutável. |
+| `migrations/versions/20261004_0003_html_sanitization_flags.py` | Adiciona flags de bypass HTML a autores e artigos sem reescrever conteúdo preexistente. |
 | `migrations/versions/20251130_0001_initial_schema.py` | Migration inicial do domínio. Adicionar novas migrations para evolução de banco já existente; não reescrever o histórico aplicado. |
 | `seeds/bootstrap.py` | Upsert de dados iniciais e registro `SeedRun`; pula o seed se seu nome já foi aplicado. |
 | `seeds/data.py` e `article_seed_data.json` | Dados iniciais de autor, perfis e artigos. Alterar o arquivo não reaplica automaticamente um seed já registrado. |
@@ -77,7 +78,8 @@ como serviço no Compose, com volume `mysql_data`.
 | `services/keycloak_client.py` | Cliente HTTP de OpenID, troca de senha por tokens, cache de discovery/JWKS, validação JWT e papéis do realm. |
 | `services/authorization.py` | Leitura de Bearer claims, verificação de papéis e resolução do autor associado para as regras de escrita. |
 | `services/tech_report.py` | Montagem do relatório HTML de runtime, banco, ambiente e dependências. |
-| `observability/metrics.py` e `observability/__init__.py` | Coleta e formatação das métricas; integração com OpenTelemetry e exposição Prometheus/OpenMetrics. |
+| `observability/metrics.py` e `observability/__init__.py` | Métricas HTTP Prometheus com agregação multiprocess e instrumentação OpenTelemetry independente; exportação OTLP opcional por worker. |
+| `observability/otel-collector.yaml` | Receiver OTLP/HTTP interno, limite de memória, processor de batch e exporter de debug para validação local. |
 | `swagger/v1/swagger.yaml` | Especificação estática dos contratos HTTP; atualizar junto de mudanças de API. |
 | `pytest.ini` | Descoberta em `tests/`, importação da API e filtros de warnings. |
 | `tests/conftest.py` | Fixtures Flask/SQLite e recriação das tabelas entre testes. Não exercita migrations no MySQL. |
@@ -133,22 +135,33 @@ ao próprio autor. Identificadores são armazenados em `author_identities` e omi
 de vínculo requer admin. Configuração de produção falha se DSN ou configurações explícitas de Keycloak faltarem ou
 usarem credenciais demonstrativas. Consulte ADRs [0049](adrs/ADR-0049.md)–[0052](adrs/ADR-0052.md).
 
-Isto não atesta prontidão para produção: a UI renderiza `post_entry` via `v-html`; uma allowlist de sanitização e
-regressão de conteúdo legado/importado ainda é pré-requisito da Fase 7.
+Artigos e biografias são sanitizados por allowlist na escrita e na serialização pública, incluindo registros legados
+sem reescrita automática do banco. Admin pode optar explicitamente por armazenar e expor HTML bruto; esse conteúdo é
+confiável e pode executar código no navegador. Para artigos, o controle da UI é restrito ao painel admin e usa checkbox
+mais ação `Salvar`. A Fase 7 ainda cobre CRUD/editor editorial e permanece planejada. Consulte os
+[ADRs-0053](adrs/ADR-0053.md) e [0054](adrs/ADR-0054.md).
 
 ## Fluxos e contratos a preservar
 
 1. **Conteúdo:** view → serviço JavaScript → blueprint → schema/model → banco → JSON → view. Os endpoints de alteração
    usam envelopes `article`, `author` e `social`; conferir schema e teste HTTP antes de modificar payloads.
 2. **Inicialização:** importar `app.py` cria a aplicação sem efeitos de banco. O comando explícito
-   `flask --app app bootstrap-db` aplica migrations e seeds. No Compose, `api-init` espera o banco saudável e a API
-   aguarda o sucesso do init antes de iniciar quatro workers; falha do init bloqueia a API nova.
+   `flask --app app bootstrap-db` aplica migrations e seeds. No Compose, executar manualmente pelo serviço
+   `api-init` (`docker compose run --rm api-init flask bootstrap-db`), que não recebe o diretório multiprocess reservado
+   à API; o serviço também espera o banco saudável e a API aguarda o sucesso do init antes de iniciar quatro workers.
+   Falha do init bloqueia a API nova.
 3. **Identidade:** `/admin` envia credenciais a `/login`; a API usa o grant de senha do Keycloak, valida o token e
    devolve tokens/papéis. A UI guarda a sessão e consulta `/admin/profile`. Nos endpoints de escrita, Bearer e papel
    são aplicados conforme o recurso; CRUD de artigo também exige vínculo privado para autor. Leia o ADR-0049 para a
    política e ADR-0051 para confiança issuer/audience.
-4. **Observabilidade:** hooks da aplicação registram requisições e logs; blueprints expõem `/metrics`, `/liveness` e
-   `/tech`. Mudanças globais devem preservar registro de erros sem contagem duplicada.
+4. **Saúde e observabilidade:** `/up` e `/liveness` são liveness público sem probes externos; `/ready` verifica MySQL e
+   discovery Keycloak com timeout global de três segundos e capacidade limitada de probes. `/metrics` exige admin e
+   agrega contadores/histogramas Prometheus dos workers com rótulos de rota estáveis. OpenTelemetry permanece uma
+   instrumentação separada. Exportação OTLP é desativada por padrão e habilitada com `OTEL_METRICS_ENABLED=true` junto
+   do perfil Compose `telemetry`; o collector não publica portas e não é dependência de serving. A integração local
+   confirmou recebimento por workers distintos e continuidade de serving durante indisponibilidade do collector; essa
+   prova não atesta operação ou capacidade na VPS. Mudanças globais devem preservar registro de erros sem contagem
+   duplicada. Consulte os [ADRs-0055](adrs/ADR-0055.md)–[0057](adrs/ADR-0057.md).
 5. **Contrato publicado:** Swagger é um arquivo estático servido em `/openapi.yaml`, com UI em `/api-docs`; não é
    gerado automaticamente pelos blueprints.
 
@@ -207,14 +220,14 @@ a um release identificado.
   sem usar esta documentação como comprovação de resultado.
 - URLs Vue são resolvidas no build; conferir as variáveis de cada serviço antes de assumir que uma única variável
   reconfigura toda a UI.
-- `ArticleView.vue` e `AboutView.vue` renderizam conteúdo do banco com `v-html`. Alterações que permitam editar esse
-  conteúdo devem incluir no escopo o tratamento de HTML e as permissões de escrita.
+- `ArticleView.vue` e `AboutView.vue` renderizam conteúdo com `v-html`; sanitização e bypass administrativo estão
+  descritos nos ADRs 0053–0054. Qualquer ampliação de conteúdo HTML deve reavaliar allowlist e autorização.
 - Desenvolvimento mantém credenciais de demonstração; em `FLASK_ENV=production`, DSN MySQL e configuração explícita
   Keycloak são exigidos e defaults demonstrativos são rejeitados. Isso não prova deploy real.
 - O Keycloak roda em `start-dev`; o Compose não define dependência/healthcheck dele para a API e não configura banco
   externo para o Keycloak. Sua dependência `db` não equivale a persistência no MySQL.
-- O cliente JWT desativa validação de audience (`verify_aud=False`). Alterações de autenticação precisam considerar esse
-  comportamento existente; este documento não altera a política.
+- A validação JWT exige issuer e audience conforme o [ADR-0051](adrs/ADR-0051.md); não há exceção `verify_aud=False` na
+  política atual.
 - Há credenciais de demonstração na configuração. O mapa descreve o ambiente existente e não constitui arquitetura de
   produção validada.
 
