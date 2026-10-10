@@ -105,6 +105,20 @@ describe('authService', () => {
     await expect(fetchAdminProfile('token')).rejects.toThrow('Ops')
   })
 
+  it('attaches the HTTP status code to rejected API errors', async () => {
+    global.fetch.mockResolvedValue(mockResponse(false, { errors: ['Insufficient permissions.'] }, 403, 'Forbidden'))
+
+    let caught
+    try {
+      await fetchAdminProfile('token')
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught.status).toBe(403)
+  })
+
   it('persists and clears the session in storage', () => {
     const session = { username: 'admin', access_token: 'token' }
 

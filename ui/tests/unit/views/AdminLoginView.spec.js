@@ -11,6 +11,14 @@ import {
   clearSession
 } from '@/services/authService'
 import { fetchArticles, updateArticleSanitizationBypass } from '@/services/articlesService'
+import {
+  initializeSso,
+  isSsoEnabled,
+  loginWithSso,
+  logoutFromSso,
+  refreshSsoSession,
+  subscribeSsoSession
+} from '@/services/ssoService'
 import { makeArticles } from '../factories/articles'
 
 vi.mock('@/components/SiteLayout.vue', () => ({
@@ -33,6 +41,15 @@ vi.mock('@/services/articlesService', () => ({
   updateArticleSanitizationBypass: vi.fn()
 }))
 
+vi.mock('@/services/ssoService', () => ({
+  initializeSso: vi.fn(),
+  isSsoEnabled: vi.fn(() => false),
+  loginWithSso: vi.fn(),
+  logoutFromSso: vi.fn(),
+  refreshSsoSession: vi.fn(),
+  subscribeSsoSession: vi.fn()
+}))
+
 const RouterLinkStub = {
   name: 'RouterLinkStub',
   props: ['to'],
@@ -40,10 +57,24 @@ const RouterLinkStub = {
 }
 
 describe('AdminLoginView', () => {
+  let sessionListener
+  let unsubscribeSession
+
   beforeEach(() => {
     vi.clearAllMocks()
     getStoredSession.mockReturnValue(null)
     fetchArticles.mockResolvedValue([])
+    isSsoEnabled.mockReturnValue(false)
+    initializeSso.mockResolvedValue(null)
+    loginWithSso.mockResolvedValue(undefined)
+    logoutFromSso.mockResolvedValue(undefined)
+    refreshSsoSession.mockResolvedValue(null)
+    sessionListener = null
+    unsubscribeSession = vi.fn()
+    subscribeSsoSession.mockImplementation(listener => {
+      sessionListener = listener
+      return unsubscribeSession
+    })
   })
 
   function mountView() {
@@ -56,6 +87,220 @@ describe('AdminLoginView', () => {
       }
     })
   }
+
+  it('shows Keycloak login without reading or persisting a legacy session in SSO mode', async () => {
+    // Arrange
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockResolvedValue(null)
+
+    // Act
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.text()).toContain('Entrar com Keycloak')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(getStoredSession).not.toHaveBeenCalled()
+    expect(persistSession).not.toHaveBeenCalled()
+    await wrapper.find('button').trigger('click')
+    expect(loginWithSso).toHaveBeenCalledOnce()
+  })
+
+  it('shows a rejected SSO callback error without reading a legacy session', async () => {
+    // Arrange
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockRejectedValue(new Error('callback inválido'))
+
+    // Act
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('.admin-login__error').text()).toContain('callback inválido')
+    expect(getStoredSession).not.toHaveBeenCalled()
+  })
+
+  it('shows the Keycloak logout error after clearing local admin state', async () => {
+    // Arrange
+    const session = { username: 'admin', access_token: 'sso-token', roles: ['admin'], sso: true }
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockResolvedValue(session)
+    logoutFromSso.mockRejectedValue(new Error('logout indisponível'))
+    fetchArticles.mockResolvedValue(makeArticles(1))
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Act
+    await wrapper.vm.handleLogout()
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.vm.session).toBeNull()
+    expect(wrapper.find('.admin-login__session').exists()).toBe(false)
+    expect(wrapper.find('.admin-login__error').text()).toContain('logout indisponível')
+  })
+
+  it('reuses an authenticated callback session and loads its admin content', async () => {
+    // Arrange
+    const session = { username: 'admin', access_token: 'sso-token', roles: ['admin'], sso: true }
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockResolvedValue(session)
+    const [article] = makeArticles(1, () => ({ id: 60, bypass_sanitization: false }))
+    fetchArticles.mockResolvedValue([article])
+
+    // Act
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.text()).toContain('Autenticado como admin')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(getStoredSession).not.toHaveBeenCalled()
+    expect(fetchArticles).toHaveBeenCalledOnce()
+    expect(wrapper.find('select[aria-label="Artigo existente"]').exists()).toBe(true)
+  })
+
+  it('uses the refreshed SSO token when saving article bypass', async () => {
+    // Arrange
+    const [article] = makeArticles(1, () => ({ id: 61, bypass_sanitization: false }))
+    const initialSession = { username: 'admin', access_token: 'old-token', roles: ['admin'], sso: true }
+    const refreshedSession = { ...initialSession, access_token: 'new-token' }
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockResolvedValue(initialSession)
+    refreshSsoSession.mockResolvedValue(refreshedSession)
+    fetchArticles.mockResolvedValue([article])
+    updateArticleSanitizationBypass.mockResolvedValue({ ...article, bypass_sanitization: true })
+
+    // Act
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.find('select[aria-label="Artigo existente"]').setValue('61')
+    await wrapper.find('input[type="checkbox"]').setValue(true)
+    await wrapper.find('button[aria-label="Salvar bypass de sanitização"]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect(refreshSsoSession).toHaveBeenCalledOnce()
+    expect(updateArticleSanitizationBypass).toHaveBeenCalledWith(61, true, 'new-token')
+    expect(wrapper.text()).toContain('Bypass atualizado.')
+  })
+
+  it('clears the view session when SSO refresh fails before an article update', async () => {
+    // Arrange
+    const [article] = makeArticles(1, () => ({ id: 62, bypass_sanitization: false }))
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockResolvedValue({ username: 'admin', access_token: 'old-token', roles: ['admin'], sso: true })
+    refreshSsoSession.mockRejectedValue(new Error('sessão expirada'))
+    fetchArticles.mockResolvedValue([article])
+
+    // Act
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.find('select[aria-label="Artigo existente"]').setValue('62')
+    await wrapper.find('input[type="checkbox"]').setValue(true)
+    await wrapper.find('button[aria-label="Salvar bypass de sanitização"]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect(updateArticleSanitizationBypass).not.toHaveBeenCalled()
+    expect(wrapper.find('.admin-login__session').exists()).toBe(false)
+    expect(wrapper.find('select[aria-label="Artigo existente"]').exists()).toBe(false)
+    expect(wrapper.find('.admin-login__error').text()).toContain('sessão expirada')
+  })
+
+  it('invalidates an SSO callback that resolves after logout', async () => {
+    // Arrange
+    let resolveInitialization
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockReturnValue(new Promise(resolve => {
+      resolveInitialization = resolve
+    }))
+    const wrapper = mountView()
+
+    // Act
+    await wrapper.vm.handleLogout()
+    resolveInitialization({ username: 'admin', access_token: 'late-token', roles: ['admin'], sso: true })
+    await flushPromises()
+
+    // Assert
+    expect(logoutFromSso).toHaveBeenCalledOnce()
+    expect(wrapper.find('.admin-login__session').exists()).toBe(false)
+    expect(fetchArticles).not.toHaveBeenCalled()
+  })
+
+  it('clears an idle SSO view when renewal fails and unsubscribes on unmount', async () => {
+    // Arrange
+    isSsoEnabled.mockReturnValue(true)
+    initializeSso.mockResolvedValue({ username: 'admin', access_token: 'expiring-token', roles: ['admin'], sso: true })
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Act
+    expect(subscribeSsoSession).toHaveBeenCalledOnce()
+    expect(wrapper.vm.session?.sso).toBe(true)
+    sessionListener({ session: null, error: new Error('sessão expirada') })
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.vm.session).toBeNull()
+    expect(wrapper.find('.admin-login__session').exists()).toBe(false)
+    expect(wrapper.find('select[aria-label="Artigo existente"]').exists()).toBe(false)
+    expect(wrapper.find('.admin-login__error').text()).toContain('sessão expirada')
+    wrapper.unmount()
+    expect(unsubscribeSession).toHaveBeenCalledOnce()
+  })
+
+  it.each(['profile refresh first', 'article write first'])(
+    'keeps profile and article state coherent when %s resolves first',
+    async order => {
+      // Arrange
+      const [article] = makeArticles(1, () => ({ id: 63, bypass_sanitization: false }))
+      const currentSession = { username: 'admin', access_token: 'current-token', roles: ['admin'], sso: true }
+      const renewedSession = { ...currentSession, access_token: 'renewed-token' }
+      isSsoEnabled.mockReturnValue(true)
+      let resolveProfileRefresh
+      let resolveWriteRefresh
+      refreshSsoSession
+        .mockReturnValueOnce(new Promise(resolve => { resolveProfileRefresh = resolve }))
+        .mockReturnValueOnce(new Promise(resolve => { resolveWriteRefresh = resolve }))
+      initializeSso.mockResolvedValue(currentSession)
+      fetchArticles.mockResolvedValue([article])
+      let resolveWrite
+      updateArticleSanitizationBypass.mockReturnValue(new Promise(resolve => { resolveWrite = resolve }))
+
+      // Act
+      const wrapper = mountView()
+      await flushPromises()
+      const profileButton = wrapper.findAll('button').find(button => button.text().includes('Atualizar perfil'))
+      await profileButton.trigger('click')
+      await wrapper.find('select[aria-label="Artigo existente"]').setValue('63')
+      await wrapper.find('input[type="checkbox"]').setValue(true)
+      await wrapper.find('button[aria-label="Salvar bypass de sanitização"]').trigger('click')
+      if (order === 'profile refresh first') resolveProfileRefresh(renewedSession)
+      else resolveWriteRefresh(renewedSession)
+      await flushPromises()
+
+      const pendingRefresh = order === 'profile refresh first' ? resolveWriteRefresh : resolveProfileRefresh
+      if (order === 'profile refresh first') {
+        expect(wrapper.vm.isProfileLoading).toBe(false)
+        expect(wrapper.vm.isBypassSaving).toBe(true)
+      } else {
+        expect(wrapper.vm.isProfileLoading).toBe(true)
+        expect(wrapper.vm.isBypassSaving).toBe(true)
+      }
+      pendingRefresh(renewedSession)
+      await flushPromises()
+      expect(updateArticleSanitizationBypass).toHaveBeenCalledWith(63, true, 'renewed-token')
+      resolveWrite({ ...article, bypass_sanitization: true })
+      await flushPromises()
+
+      // Assert
+      expect(wrapper.vm.isProfileLoading).toBe(false)
+      expect(wrapper.vm.isBypassSaving).toBe(false)
+      expect(wrapper.vm.session.access_token).toBe('renewed-token')
+      expect(wrapper.text()).toContain('Bypass atualizado.')
+    }
+  )
 
   it('submits credentials and persists the session', async () => {
     login.mockResolvedValue({ username: 'admin', access_token: 'token', roles: ['admin'] })

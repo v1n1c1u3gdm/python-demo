@@ -9,6 +9,13 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Login de navegador da UI local por Keycloak Authorization Code e PKCE, com tokens em memória e perfil validado pela API.
+- Entrada `compose.yaml` com bootstrap local de segredos e TLS, provisionamento idempotente do realm e da identidade
+  administrativa Keycloak, gateway HTTPS em loopback e seis redes isoladas por projeto; marcadores de geração mantêm
+  as rotas BookStack, Gitea e CI fechadas. ADRs-0074 e 0075 registram as decisões locais aprovadas.
+- Integrações nativas locais de BookStack e Gitea com Keycloak e OAuth do Woodpecker provisionado uma vez pelo Gitea;
+  o backchannel BookStack usa listener TLS interno e chave pública validada por JWKS. ADR-0077 registra a forge local;
+  a configuração GitHub existente permanece inalterada.
 - Orquestração local única com preflight de segredos e par TLS antes dos quatro Compose stacks; overlay CI conectado ao
   gateway e exporter construído na imagem, com runner bloqueado por padrão. Collector OTLP portátil habilitável pelo
   profile `telemetry` e `OTEL_METRICS_ENABLED`.
@@ -88,6 +95,10 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Reconstrução das mudanças históricas abaixo a partir dos seis commits disponíveis.
 
 ### Changed
+
+- Regras locais exigem logins humanos `admin` / `admin!123`, execução a partir do repositório via
+  `docker compose up` e objetivo de autenticação centralizada no Keycloak. O bootstrap e as integrações nativas locais
+  já foram implementados; o fluxo SSO no navegador permanece na tarefa própria.
 
 - Preferência de esforço atualizada para Sol baixo em orquestração e Luna médio em implementação; a sessão ativa não
   pode ser reconfigurada por ferramenta.

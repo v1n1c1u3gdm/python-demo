@@ -181,4 +181,6 @@ cython_debug/
 .ci-tools/
 /ci/credentials/
 /infra/secrets/
+/infra/secrets/local/
+/infra/.local/
 /infra/.env

@@ -14,6 +14,26 @@ Estas regras se aplicam a todo o repositório e a todos os agentes e subagentes.
 - Indicar alterações incompatíveis com `!` e explicar em `BREAKING CHANGE:` no corpo do commit.
 - Criar commits apenas quando autorizados e depois das verificações obrigatórias abaixo.
 
+## Ambiente local e autenticação de teste
+
+- Todos os logins humanos de teste local devem usar **`admin` / `admin!123`**, incluindo a conta administrativa
+  do Keycloak e a identidade administrativa da aplicação. Serviços integrados devem consumir essa identidade;
+  não criar usuários demonstrativos com nomes ou senhas diferentes sem solicitação explícita do usuário.
+- A autenticação centralizada no **Keycloak** é o objetivo do ambiente local. Considerar as integrações nativas
+  dos serviços; Woodpecker autentica por uma forge, portanto seu caminho de integração é Gitea conectado ao Keycloak.
+  Não inventar um mecanismo de senha local próprio do Woodpecker nem afirmar integração antes de testá-la.
+- Executar o ambiente local a partir da raiz deste repositório. O fluxo esperado é **`docker compose up`**, com
+  bootstrap automático das configurações locais necessárias e persistência entre reinicializações.
+- Arquivos locais de configuração, certificados, segredos e helpers devem ficar em caminhos do repositório,
+  ignorados pelo Git e excluídos dos contextos de build quando sensíveis. Não criar ambientes em
+  `~/.local/state/python-demo-preview`, diretórios pessoais ou outros caminhos externos como requisito de execução.
+- Não exigir uma sequência manual de scripts, cadastro de clientes OAuth ou comandos administrativos para o primeiro
+  startup local; incorporar a preparação ao ciclo Compose e testar repetição e falhas do bootstrap.
+- Estas credenciais fixas são exclusivas de desenvolvimento/teste local. Não alterar as regras de configuração,
+  segredos e autenticação de produção para acomodá-las. Segredos técnicos entre serviços não são logins humanos.
+- Preservar bancos e recursos alheios ao ambiente em alterações de infraestrutura. Remover dados locais somente
+  quando o usuário autorizar o reset; documentar quais caminhos e volumes são afetados.
+
 ## TDD e testes fluentes
 
 - Toda implementação de funcionalidade, correção de bug ou mudança de comportamento deve seguir TDD, inclusive quando

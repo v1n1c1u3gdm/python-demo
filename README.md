@@ -9,6 +9,57 @@ containerizado. A raiz está organizada em dois módulos:
 - `ui/` – front-end Vue 3 + Bootstrap 4, com Vite, Vitest e Vue Test Utils 2 (cobertura mínima de linhas de 85%)
   consumindo os mesmos endpoints.
 
+## Ambiente local padrão com SSO
+
+Na raiz do repositório, `docker compose up` inicia a stack local padrão definida em `compose.yaml`. O primeiro startup gera
+configuração, certificados e segredos técnicos dentro de `infra/.local/` e `infra/secrets/local/`, provisiona o realm
+`python-demo` e configura as integrações nativas. Esses arquivos persistem entre reinícios e não entram no Git.
+
+- UI administrativa: <https://app.localhost/admin>
+- Keycloak: <https://app.localhost/auth/>
+- BookStack: <https://app.localhost/bookstack/>
+- Gitea: <https://app.localhost/git/>
+- Woodpecker: <https://app.localhost/ci/>
+
+O único login humano local é `admin` / `admin!123`, tanto no Keycloak como nas integrações administrativas. A UI usa
+Authorization Code com PKCE; BookStack e Gitea usam seus provedores OIDC nativos; Woodpecker autentica através da sessão
+do Gitea. A CI mantém cadastro fechado e não inicia agente ou runner. O gateway publica apenas TLS em `127.0.0.1:443`;
+API, bancos e consoles não publicam portas próprias no host.
+
+O certificado é local e sua CA pública fica em `infra/.local/public/ca.crt`. A automação Playwright valida a CA e o nome
+`app.localhost` com Node TLS estrito e permite no Chromium somente a SPKI do certificado observado. Isso não altera o
+trust store do sistema nem ignora certificados de outros servidores. Para navegação manual, use um perfil de navegador
+local se optar por confiar nessa CA; não instale a CA local como confiança global.
+
+O estado dos serviços e dos inicializadores pode ser consultado sem imprimir segredos:
+
+```sh
+docker compose ps -a
+docker compose logs --tail=100 local-init keycloak-init bookstack-prepare bookstack-init gitea-prepare gitea-init gitea-oauth-init ci-init app-init
+```
+
+Um inicializador com saída diferente de zero bloqueia as rotas protegidas da geração atual. Corrija a causa indicada pelo
+serviço e execute `docker compose up -d` novamente. Para alterações de código ou imagens, use
+`docker compose up --build -d`
+desde a raiz, que reconcilia a stack completa e executa os inicializadores na ordem definida. Um simples
+`docker compose restart <serviço>` reinicia somente o container indicado e não refaz o bootstrap nem as migrações.
+`docker compose down` para o projeto mantendo os volumes e os arquivos de runtime; `docker compose up` inicia de novo com
+a identidade persistida.
+
+`docker compose -p python-demo-local down --volumes` remove somente os volumes do projeto padrão: MySQL da API/Keycloak,
+MariaDB e estado persistente de BookStack, Gitea e Woodpecker. Isso apaga os dados locais desses serviços e o banco do
+realm Keycloak. Os arquivos bind-mounted em `infra/.local/` e `infra/secrets/local/` permanecem; o próximo `up` recria o
+realm e a identidade `admin` a partir deles, mas IDs internos podem mudar. Não há rotação parcial automática: trocar CA,
+chaves ou segredos técnicos exige uma operação coordenada entre serviços, arquivos persistidos e dados associados. Faça
+inventário e backup somente do projeto `python-demo-local` antes de qualquer reset completo; não remova diretórios locais
+compartilhados nem recursos de outros projetos.
+
+GitHub continua sendo a forge operacional existente. Gitea é a forge de desenvolvimento local conectada ao Keycloak;
+Woodpecker local usa essa forge. Nada nesta configuração instala ou altera GitHub, o host, DNS global ou uma VPS.
+A saída do botão de logout da UI encerra a sessão local da UI pelo adapter Keycloak; os cookies nativos de BookStack,
+Gitea e Woodpecker são próprios e podem continuar ativos até o logout daquele serviço ou o encerramento do perfil do
+navegador.
+
 ## Arquitetura & Tecnologias
 
 - **API (`api/`)**: Flask 3.1 + Gunicorn, SQLAlchemy 2 com PyMySQL, migrations Alembic via Flask-Migrate, seeds
@@ -17,12 +68,12 @@ containerizado. A raiz está organizada em dois módulos:
   local opcional. O exportador fica desabilitado por padrão. Logs HTTP e SQLAlchemy são gravados em `api/logs/`.
 - **UI (`ui/`)**: Vue 3 com Vite e Bootstrap 4, Build multi-stage (Node → NGINX) compartilhando o mesmo `Dockerfile`.
   Testes unitários com Vitest + Vue Test Utils 2 garantindo ≥85% de cobertura de linhas.
-- **Banco (serviço `db`)**: MySQL 8.4 em container dedicado com volume `mysql_data` e credenciais fixas (`ruby-demo` /
-  `2u8y-c0d3`).
-- **Identidade (`keycloak/`)**: Keycloak 26.4.7 sobe via Docker com realm importado automaticamente, dois papéis
-  (`admin`, `author`) e usuários seeded (`admin`, `vinicius`).
-- **Orquestração**: `docker-compose.yml` define `api`, `ui`, `db` e `keycloak`, injeta `DATABASE_URL`, `VINICIUS_PUBLIC_KEY`,
-  `LOG_DIR`, `FLASK_ENV` e garante que migrations + seeds executem automaticamente no primeiro boot.
+- **Banco portátil (`docker-compose.yml`, serviço `db`)**: MySQL 8.4 em container dedicado com volume `mysql_data`;
+  essa stack não é o Compose local padrão.
+- **Identidade portátil (`docker-compose.yml`)**: Keycloak 26.4.7 importa o realm de demonstração. A stack local
+  padrão usa bootstrap próprio e somente a identidade humana `admin`.
+- **Orquestração portátil**: `docker-compose.yml` mantém `api`, `ui`, `db` e `keycloak`. O Compose local padrão é
+  `compose.yaml`, documentado acima.
 
 ## Stack
 
@@ -54,6 +105,10 @@ containerizado. A raiz está organizada em dois módulos:
 
 ## Como iniciar com Docker
 
+Esta seção descreve a stack portátil histórica de `docker-compose.yml`; para uso local autenticado, siga primeiro
+[Ambiente local padrão com SSO](#ambiente-local-padr%C3%A3o-com-sso). Selecione explicitamente o arquivo portátil para
+evitar iniciar a stack local padrão:
+
 ### Pré-requisitos
 
 - Docker 24+ e Docker Compose v2.
@@ -63,7 +118,7 @@ containerizado. A raiz está organizada em dois módulos:
 ### Passo a passo rápido
 
 ```bash
-docker compose up --build
+docker compose -f docker-compose.yml up --build
 ```
 
 - O serviço `api-init` aguarda o MySQL saudável e executa `flask bootstrap-db` uma vez antes dos quatro workers da API.
@@ -77,17 +132,18 @@ docker compose up --build
   boot.
 
 O bootstrap coordena apenas o init de um projeto Compose. Não há exclusão entre diferentes projetos/hosts nem entre
-execuções manuais concorrentes; mantenha essas execuções serializadas. O comando `docker compose restart api` reinicia
-os workers sem recriar o init.
+execuções manuais concorrentes; mantenha essas execuções serializadas. O comando
+`docker compose -f docker-compose.yml restart api` reinicia os workers sem recriar o init.
 
-Para executar o bootstrap manualmente no Compose, use `docker compose run --rm api-init flask bootstrap-db`; o serviço
-de init não recebe o diretório multiprocess reservado à API Gunicorn.
+Para executar o bootstrap manualmente no Compose, use
+`docker compose -f docker-compose.yml run --rm api-init flask bootstrap-db`; o serviço de init não recebe o diretório
+multiprocess reservado à API Gunicorn.
 
 Para habilitar exportação OTLP no ambiente local, defina a variável que ativa o exportador e inicie também o perfil do
 collector:
 
 ```bash
-OTEL_METRICS_ENABLED=true docker compose --profile telemetry up --build
+OTEL_METRICS_ENABLED=true docker compose -f docker-compose.yml --profile telemetry up --build
 ```
 
 O perfil inicia `otel-collector`, mas a exportação pela API continua desabilitada por padrão. O endpoint OTLP usa a
@@ -103,24 +159,25 @@ durante a mudança. Se a UI também precisar de imagem nova, pare e reconstrua-a
 
 ```bash
 set -e
-docker compose stop api ui
-docker compose build api
+docker compose -f docker-compose.yml stop api ui
+docker compose -f docker-compose.yml build api
 # Inclua ui se a atualização também mudar a imagem da UI:
-# docker compose build api ui
-docker compose up -d --force-recreate api-init
-docker compose wait api-init
-init_id="$(docker compose ps -aq api-init)"
+# docker compose -f docker-compose.yml build api ui
+docker compose -f docker-compose.yml up -d --force-recreate api-init
+docker compose -f docker-compose.yml wait api-init
+init_id="$(docker compose -f docker-compose.yml ps -aq api-init)"
 test -n "$init_id"
 init_exit_code="$(docker inspect --format='{{.State.ExitCode}}' "$init_id")"
 test "$init_exit_code" -eq 0
-docker compose up -d api ui
+docker compose -f docker-compose.yml up -d api ui
 ```
 
-Só inicie API e UI depois de confirmar exit code 0 do init. Se esse gate falhar, confira `docker compose logs api-init`
-e não inicie a API nova. `docker compose wait` aguarda o término; a inspeção explícita confirma o sucesso. Faça o init
-em modo detached: não use `docker compose up api-init` em primeiro plano com o banco já em execução, pois essa forma
-pode tentar iniciar novamente as dependências. Não use `--no-deps` para contornar a ordem do Compose. Um `docker
-compose up --build` normal também pode executar o init novamente, sequencialmente; migrations e seeds repetidos são
+Só inicie API e UI depois de confirmar exit code 0 do init. Se esse gate falhar, confira
+`docker compose -f docker-compose.yml logs api-init` e não inicie a API nova. `docker compose wait` aguarda o término; a
+inspeção explícita confirma o sucesso. Faça o init em modo detached: não use
+`docker compose -f docker-compose.yml up api-init` em primeiro plano com o banco já em execução, pois essa forma pode
+tentar iniciar novamente as dependências. Não use `--no-deps` para contornar a ordem do Compose. Um `docker compose up
+--build` normal também pode executar o init novamente, sequencialmente; migrations e seeds repetidos são
 seguros.
 
 ### Variáveis relevantes
@@ -208,7 +265,7 @@ de correção.
   ```
 
 Se quiser ajustar o realm, edite `keycloak/realm-python-demo.json` e recomece o container `keycloak` com
-`docker compose up -d --force-recreate keycloak`.
+`docker compose -f docker-compose.yml up -d --force-recreate keycloak`.
 
 ## Desenvolvimento fora do Docker
 
@@ -282,7 +339,7 @@ hostname interno do Compose, inadequado como endereço público da SPA.
 Para Docker, sobrescreva as variáveis com argumentos de build, por exemplo:
 
 ```bash
-docker compose build --build-arg VITE_API_BASE_URL=https://api.example.com ui
+docker compose -f docker-compose.yml build --build-arg VITE_API_BASE_URL=https://api.example.com ui
 ```
 
 Esse argumento configura autenticação; os endpoints de conteúdo têm argumentos

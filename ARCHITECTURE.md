@@ -20,9 +20,52 @@ flowchart LR
     API --> KC[Keycloak / OpenID / JWKS]
 ```
 
-A SPA é entregue pelo NGINX, mas suas chamadas à API saem do navegador. `ui/nginx.conf` não configura proxy da API. O
-Compose de desenvolvimento expõe UI em 8080, API em 3000, MySQL em 3306 e Keycloak em 8081. Não existe uma pasta
-`db/`: o banco é definido como serviço no Compose, com volume `mysql_data`.
+A SPA é entregue pelo NGINX; na stack portátil histórica, suas chamadas à API saem do navegador. O arquivo
+`docker-compose.yml` preserva as portas de desenvolvimento 8080, 3000, 3306 e 8081 e seu volume `mysql_data`. O Compose
+local padrão descrito abaixo publica apenas o gateway TLS em loopback.
+
+## Compose local padrão e SSO
+
+`compose.yaml` é o Compose selecionado por `docker compose up` na raiz. Ele mantém configuração local em
+`infra/.local/` e segredos/chaves gerados em `infra/secrets/local/`; esses diretórios são ignorados pelo Git e não são
+requisitos externos ao checkout. `local-init` prepara uma geração antes dos serviços dependentes. `keycloak-init`,
+`app-init` e os inicializadores de BookStack, Gitea e Woodpecker terminam antes que o gateway anuncie suas rotas. Os
+marcadores `ready/{bookstack,gitea,ci}` devem corresponder a `bootstrap-generation`; uma falha remove readiness para a
+geração ativa e mantém as rotas fechadas. A composição raiz com bootstrap local está registrada no
+[ADR-0074](adrs/ADR-0074.md), e a identidade administrativa centralizada no Keycloak no [ADR-0075](adrs/ADR-0075.md).
+
+```mermaid
+flowchart LR
+    Browser[Navegador] --> Gateway[Gateway HTTPS app.localhost]
+    Gateway --> UI[UI Vue / PKCE]
+    Gateway --> API[API Flask]
+    Gateway --> KC[Keycloak]
+    Gateway --> BS[BookStack OIDC]
+    Gateway --> GT[Gitea OIDC]
+    Gateway --> WP[Woodpecker]
+    UI --> API
+    API --> MySQL[(MySQL da aplicação)]
+    API --> KC
+    WP --> GT
+    Init[Bootstrap e init nativos] --> KC
+    Init --> BS
+    Init --> GT
+    Init --> WP
+```
+
+As redes `app_data`, `legacy_data` e `ci_control` são internas ao projeto. O gateway liga as redes web para rotear
+tráfego, e os bancos não publicam portas. A UI usa Authorization Code/PKCE e mantém access/refresh tokens em memória.
+BookStack e Gitea usam seus provedores nativos; Woodpecker usa o login do Gitea. A identidade humana local é
+`admin` / `admin!123`; permissões administrativas dependem dos grupos/claims provisionados, não apenas de nome ou email.
+O logout da UI encerra sua sessão Keycloak, enquanto BookStack, Gitea e Woodpecker mantêm cookies próprios. O adapter
+`keycloak-js` com PKCE está registrado no [ADR-0076](adrs/ADR-0076.md), e a forge Gitea do Woodpecker no
+[ADR-0077](adrs/ADR-0077.md).
+
+O gateway verifica a CA local e roteia somente depois do bootstrap. Seus logs de acesso incluem método, URI sem query e
+status, nunca valores de query como `code`, `state` ou tokens. Os testes de navegador primeiro validam a cadeia TLS e o
+SNI `app.localhost` via Node com a CA do projeto, extraem a SPKI do certificado conectado e passam ao Chromium somente
+essa exceção específica. Eles usam perfil persistente descartável e caches sob `infra/.local/playwright/`; não mudam
+trust store global nem aceitam certificados não relacionados.
 
 ## Mapa de pastas e arquivos principais
 
@@ -36,6 +79,7 @@ Compose de desenvolvimento expõe UI em 8080, API em 3000, MySQL em 3306 e Keycl
 | `adrs/` | Decisões numeradas e cumulativas, com evidências, contexto e consequências. |
 | `Dockerfile` | Estágios `api-app`, `ui-build` e `ui-app`; Python 3.14.7, build Node 24 e runtime NGINX. O estágio da API inclui o helper de runtime `ci/stack_config.py`. |
 | `docker-compose.yml` | Serviços de desenvolvimento `api`, `api-init`, `ui`, `db` e `keycloak`; collector OTLP opcional no perfil `telemetry`. |
+| `compose.yaml` | Ambiente local padrão com bootstrap automático, Keycloak, BookStack e Gitea nativos, Woodpecker ligado ao Gitea e gateway TLS por geração; não altera os Compose portáteis nem a configuração GitHub existente. |
 | `infra/compose/app.yaml` | Stack portátil da aplicação, com MySQL persistente, API/init/UI e Keycloak; redes de dados interna e web compartilhável, sem portas de host. |
 | `infra/compose/legacy.yaml` | Fixture isolada para BookStack/MariaDB, Gitea e share fechado; volumes próprios, nenhum dado de origem presumido e nenhuma porta publicada. |
 | `infra/compose/ci.yaml` | Overlay portátil do Woodpecker; alias do servidor na rede web do gateway, exporter construído na imagem e runner não iniciado. |
@@ -199,10 +243,12 @@ montado read-only com NGINX configurado para negar todas as requisições. Consu
    `api-init` (`docker compose run --rm api-init flask bootstrap-db`), que não recebe o diretório multiprocess reservado
    à API; o serviço também espera o banco saudável e a API aguarda o sucesso do init antes de iniciar quatro workers.
    Falha do init bloqueia a API nova.
-3. **Identidade:** `/admin` envia credenciais a `/login`; a API usa o grant de senha do Keycloak, valida o token e
-   devolve tokens/papéis. A UI guarda a sessão e consulta `/admin/profile`. Nos endpoints de escrita, Bearer e papel
-   são aplicados conforme o recurso; CRUD de artigo também exige vínculo privado para autor. Leia o ADR-0049 para a
-   política e ADR-0051 para confiança issuer/audience.
+3. **Identidade:** na stack local padrão, a UI usa Authorization Code/PKCE com Keycloak e consulta `/admin/profile`
+   usando seu access token em memória. BookStack e Gitea iniciam o OIDC por suas rotas nativas; Woodpecker autentica
+   por Gitea. O fluxo legado `/login` continua disponível à stack portátil e a clientes existentes: a API valida issuer,
+   audience e role no Bearer token. Nos endpoints de escrita, Bearer e papel são aplicados conforme o recurso; CRUD de
+   artigo também exige vínculo privado para autor. Leia o ADR-0049 para a política e ADR-0051 para confiança
+   issuer/audience.
 4. **Saúde e observabilidade:** `/up` e `/liveness` são liveness público sem probes externos; `/ready` verifica MySQL e
    discovery Keycloak com timeout global de três segundos e capacidade limitada de probes. `/metrics` exige admin e
    agrega contadores/histogramas Prometheus dos workers com rótulos de rota estáveis. OpenTelemetry permanece uma
@@ -273,7 +319,12 @@ a um release identificado.
   descritos nos ADRs 0053–0054. Qualquer ampliação de conteúdo HTML deve reavaliar allowlist e autorização.
 - Desenvolvimento mantém credenciais de demonstração; em `FLASK_ENV=production`, DSN MySQL e configuração explícita
   Keycloak são exigidos e defaults demonstrativos são rejeitados. Isso não prova deploy real.
-- O Compose da raiz mantém Keycloak em `start-dev` para desenvolvimento. A preparação em `infra/compose/app.yaml` usa
+- O `compose.yaml` raiz agora mantém a identidade humana local no Keycloak, configura BookStack e Gitea por seus
+  mecanismos OIDC nativos e provisiona o OAuth do Woodpecker no Gitea. BookStack usa issuer/autorização públicos e
+  backchannel TLS interno com certificado adicional e chave pública derivada de discovery/JWKS; rotação da chave
+  assinadora do realm exige recriar os serviços de bootstrap para atualizar essa chave. O início dos redirects nativos
+  foi verificado, sem comprovar login completo no navegador. O Compose operacional `docker-compose.yml` mantém sua
+  configuração própria. A preparação em `infra/compose/app.yaml` usa
   Keycloak `start` e banco persistente separado da API por schema e usuário; o gateway preserva o issuer externo HTTPS.
 - A validação JWT exige issuer e audience conforme o [ADR-0051](adrs/ADR-0051.md); não há exceção `verify_aud=False` na
   política atual.
