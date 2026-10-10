@@ -33,7 +33,9 @@ async function httpRequest(path, options = {}) {
     } catch {
       // ignore json parsing errors, fall back to status text
     }
-    throw new Error(detail)
+    const error = new Error(detail)
+    error.status = response.status
+    throw error
   }
 
   return response.json()

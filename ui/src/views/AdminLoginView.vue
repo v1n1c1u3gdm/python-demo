@@ -5,7 +5,7 @@
         <h1>/admin</h1>
         <p>Somente usuários autenticados podem acessar as rotas administrativas.</p>
         <p class="admin-hero__hint">
-          Use os usuários provisionados no Keycloak (`admin` ou `vinicius`) para explorar a área autenticada.
+          Entre com a identidade local provisionada no Keycloak.
         </p>
       </div>
     </template>
@@ -19,7 +19,7 @@
 
         <article class="admin-login__card">
           <form
-            v-if="!isAuthenticated"
+            v-if="!isAuthenticated && !ssoEnabled"
             class="admin-login__form"
             autocomplete="off"
             @submit.prevent="handleSubmit"
@@ -58,6 +58,20 @@
               {{ isSubmitting ? 'Autenticando...' : 'Entrar' }}
             </button>
           </form>
+
+          <div
+            v-else-if="!isAuthenticated"
+            class="admin-login__sso"
+          >
+            <button
+              class="btn admin-login__submit"
+              type="button"
+              :disabled="isSubmitting"
+              @click="handleSsoLogin"
+            >
+              {{ isSubmitting ? 'Redirecionando...' : 'Entrar com Keycloak' }}
+            </button>
+          </div>
 
           <div
             v-else
@@ -205,6 +219,14 @@ import {
   fetchAdminProfile,
   clearSession
 } from '@/services/authService'
+import {
+  initializeSso,
+  isSsoEnabled,
+  loginWithSso,
+  logoutFromSso,
+  refreshSsoSession,
+  subscribeSsoSession
+} from '@/services/ssoService'
 import { fetchArticles, updateArticleSanitizationBypass } from '@/services/articlesService'
 
 export default {
@@ -229,7 +251,9 @@ export default {
       isArticlesLoading: false,
       isBypassSaving: false,
       bypassStatus: null,
-      bypassOperation: 0
+      bypassOperation: 0,
+      authGeneration: 0,
+      unsubscribeSsoSession: null
     }
   },
   computed: {
@@ -239,11 +263,19 @@ export default {
     isAdmin() {
       return Boolean(this.session?.roles?.includes('admin'))
     },
+    ssoEnabled() {
+      return isSsoEnabled()
+    },
     selectedArticle() {
       return this.adminArticles.find(article => String(article.id) === this.selectedArticleId) || null
     }
   },
   created() {
+    if (this.ssoEnabled) {
+      this.unsubscribeSsoSession = subscribeSsoSession(state => this.handleSsoSessionChange(state))
+      this.initializeSsoSession()
+      return
+    }
     const storedSession = getStoredSession()
     if (storedSession) {
       this.session = storedSession
@@ -251,7 +283,72 @@ export default {
       if (this.isAdmin) this.loadAdminArticles()
     }
   },
+  beforeUnmount() {
+    this.unsubscribeSsoSession?.()
+  },
   methods: {
+    async initializeSsoSession() {
+      const operation = ++this.bypassOperation
+      try {
+        const session = await initializeSso()
+        if (operation !== this.bypassOperation || !session) return
+        this.applySsoSession(session)
+      } catch (error) {
+        if (operation === this.bypassOperation) {
+          this.clearAuthenticatedState()
+          this.errorMessage = error?.message || 'Não foi possível iniciar a sessão Keycloak.'
+        }
+      }
+    },
+    profileFromSession(session) {
+      return {
+        username: session.username,
+        email: session.email,
+        roles: session.roles
+      }
+    },
+    applySsoSession(session) {
+      if (!session?.roles?.includes('admin')) {
+        this.clearAuthenticatedState()
+        this.errorMessage = 'A conta não possui o papel admin.'
+        return
+      }
+      const sameIdentity = this.session?.sso && this.session.username === session.username
+      this.session = session
+      this.profile = this.profileFromSession(session)
+      if (!sameIdentity) {
+        this.authGeneration += 1
+        this.adminArticles = []
+        if (this.isAdmin) this.loadAdminArticles()
+      }
+    },
+    handleSsoSessionChange({ session, error } = {}) {
+      if (session) this.applySsoSession(session)
+      else if (this.session?.sso) this.clearAuthenticatedState()
+      if (error) this.errorMessage = error?.message || 'A sessão Keycloak expirou.'
+    },
+    clearAuthenticatedState() {
+      this.authGeneration += 1
+      this.session = null
+      this.profile = null
+      this.adminArticles = []
+      this.selectedArticleId = ''
+      this.draftBypassSanitization = false
+      this.isArticlesLoading = false
+      this.isBypassSaving = false
+      this.bypassStatus = null
+    },
+    async handleSsoLogin() {
+      this.errorMessage = null
+      this.isSubmitting = true
+      try {
+        await loginWithSso()
+      } catch (error) {
+        this.errorMessage = error?.message || 'Não foi possível iniciar o login Keycloak.'
+      } finally {
+        this.isSubmitting = false
+      }
+    },
     async handleSubmit() {
       this.errorMessage = null
       this.isSubmitting = true
@@ -259,6 +356,7 @@ export default {
       try {
         const session = await login(this.credentials.username, this.credentials.password)
         persistSession(session)
+        this.authGeneration += 1
         this.session = session
         this.profile = null
         this.credentials.username = ''
@@ -275,38 +373,59 @@ export default {
       if (!this.session?.access_token) return
       this.errorMessage = null
       this.isProfileLoading = true
+      const operation = this.bypassOperation
+      const authGeneration = this.authGeneration
 
       try {
-        this.profile = await fetchAdminProfile(this.session.access_token)
+        if (this.session.sso) await this.refreshProfile(operation, authGeneration)
+        else await this.fetchLegacyProfile(operation, authGeneration)
       } catch (error) {
-        this.errorMessage = error?.message || 'Não foi possível carregar o perfil.'
+        this.handleProfileError(operation, authGeneration, error)
       } finally {
-        this.isProfileLoading = false
+        if (this.isCurrentOperation(operation, authGeneration)) this.isProfileLoading = false
       }
     },
-    isCurrentOperation(operation, token) {
-      return operation === this.bypassOperation && this.session?.access_token === token
+    async refreshProfile(operation, authGeneration) {
+      const refreshedSession = await refreshSsoSession()
+      if (!this.isCurrentOperation(operation, authGeneration)) return
+      if (!refreshedSession?.roles?.includes('admin')) {
+        this.clearAuthenticatedState()
+        return
+      }
+      this.applySsoSession(refreshedSession)
     },
-    isCurrentAdminOperation(operation, token) {
-      return this.isCurrentOperation(operation, token) && this.isAdmin
+    async fetchLegacyProfile(operation, authGeneration) {
+      const profile = await fetchAdminProfile(this.session.access_token)
+      if (this.isCurrentOperation(operation, authGeneration)) this.profile = profile
+    },
+    handleProfileError(operation, authGeneration, error) {
+      if (!this.isCurrentOperation(operation, authGeneration)) return
+      if (this.session.sso) this.clearAuthenticatedState()
+      this.errorMessage = error?.message || 'Não foi possível carregar o perfil.'
+    },
+    isCurrentOperation(operation, authGeneration) {
+      return operation === this.bypassOperation && authGeneration === this.authGeneration && Boolean(this.session?.access_token)
+    },
+    isCurrentAdminOperation(operation, authGeneration) {
+      return this.isCurrentOperation(operation, authGeneration) && this.isAdmin
     },
     async loadAdminArticles() {
       if (!this.isAdmin || !this.session?.access_token) return
-      const token = this.session.access_token
       const operation = this.bypassOperation
+      const authGeneration = this.authGeneration
       this.isArticlesLoading = true
 
       try {
         const articles = await fetchArticles({ force: true })
-        if (this.isCurrentAdminOperation(operation, token)) {
+        if (this.isCurrentAdminOperation(operation, authGeneration)) {
           this.adminArticles = articles
         }
       } catch (error) {
-        if (this.isCurrentOperation(operation, token)) {
+        if (this.isCurrentOperation(operation, authGeneration)) {
           this.errorMessage = error?.message || 'Não foi possível carregar os artigos.'
         }
       } finally {
-        if (this.isCurrentOperation(operation, token)) this.isArticlesLoading = false
+        if (this.isCurrentOperation(operation, authGeneration)) this.isArticlesLoading = false
       }
     },
     selectArticle() {
@@ -327,43 +446,59 @@ export default {
     canSaveArticleBypass() {
       return this.isAdmin && Boolean(this.selectedArticle && this.session?.access_token) && !this.isBypassSaving
     },
+    async tokenForArticleSave(currentSession, operation, authGeneration) {
+      if (!currentSession.sso) return currentSession.access_token
+      const refreshedSession = await refreshSsoSession()
+      if (!this.isCurrentOperation(operation, authGeneration)) return null
+      if (!refreshedSession?.roles?.includes('admin')) {
+        this.clearAuthenticatedState()
+        return null
+      }
+      this.applySsoSession(refreshedSession)
+      return refreshedSession.access_token
+    },
     async saveArticleBypass() {
       if (!this.canSaveArticleBypass()) return
       const articleId = this.selectedArticle.id
-      const token = this.session.access_token
+      const currentSession = this.session
       const operation = this.bypassOperation
+      const authGeneration = this.authGeneration
       this.errorMessage = null
       this.bypassStatus = null
       this.isBypassSaving = true
 
       try {
+        const token = await this.tokenForArticleSave(currentSession, operation, authGeneration)
+        if (!token) return
         const updatedArticle = await updateArticleSanitizationBypass(
           articleId,
           this.draftBypassSanitization,
           token
         )
-        if (!this.isCurrentOperation(operation, token)) return
+        if (!this.isCurrentOperation(operation, authGeneration)) return
         this.applyArticleBypassUpdate(articleId, updatedArticle)
       } catch (error) {
-        if (!this.isCurrentOperation(operation, token)) return
+        if (!this.isCurrentOperation(operation, authGeneration)) return
+        if (currentSession.sso) this.clearAuthenticatedState()
         this.restoreArticleBypassAfterFailure()
         this.errorMessage = error?.message || 'Não foi possível atualizar o bypass.'
       } finally {
-        if (this.isCurrentOperation(operation, token)) this.isBypassSaving = false
+        if (this.isCurrentOperation(operation, authGeneration)) this.isBypassSaving = false
       }
     },
-    handleLogout() {
+    async handleLogout() {
+      const shouldLogoutFromSso = this.ssoEnabled || Boolean(this.session?.sso)
       this.bypassOperation += 1
       clearSession()
-      this.session = null
-      this.profile = null
-      this.adminArticles = []
-      this.selectedArticleId = ''
-      this.draftBypassSanitization = false
-      this.isArticlesLoading = false
-      this.isBypassSaving = false
-      this.bypassStatus = null
+      this.clearAuthenticatedState()
       this.errorMessage = null
+      if (shouldLogoutFromSso) {
+        try {
+          await logoutFromSso()
+        } catch (error) {
+          this.errorMessage = error?.message || 'Não foi possível encerrar a sessão Keycloak.'
+        }
+      }
     }
   }
 }
