@@ -10,10 +10,18 @@ ROOT = Path(__file__).resolve().parents[2]
 class ContainerBuildTests(unittest.TestCase):
     def test_every_base_image_is_pinned_and_runtime_python_uses_hash_exports(self):
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-        base_images = re.findall(r"^FROM\s+(\S+)", dockerfile, flags=re.MULTILINE)
+        stages = re.findall(r"^FROM\s+(\S+)(?:\s+AS\s+(\S+))?", dockerfile, flags=re.MULTILINE)
+        declared_stages = set()
+        base_images = []
+        for image, alias in stages:
+            if image not in declared_stages:
+                base_images.append(image)
+            if alias:
+                declared_stages.add(alias)
 
         self.assertEqual(len(base_images), 3)
         self.assertTrue(all(re.search(r"@sha256:[0-9a-f]{64}$", image) for image in base_images))
+        self.assertIn(("api-app", "local-bootstrap"), stages)
         self.assertIn("pip install --no-cache-dir --require-hashes -r requirements.txt", dockerfile)
 
     def test_workflow_base_contains_pinned_python_git_and_xz(self):

@@ -84,6 +84,24 @@
       "reference": "nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
       "source": "https://hub.docker.com/_/nginx",
       "provenance": "Same pinned nginx runtime base as app-ui; used with a local deny-all configuration"
+    },
+    {
+      "service": "woodpecker-server",
+      "reference": "docker.io/woodpeckerci/woodpecker-server:v3.18.0@sha256:5192aee400df23671de8ddffb906670e93d07ae8967c7f9e50efefca3a2deea5",
+      "source": "https://github.com/woodpecker-ci/woodpecker",
+      "provenance": "Official server image; manifest-list digest pinned in the local integration"
+    },
+    {
+      "service": "woodpecker-cli",
+      "reference": "docker.io/woodpeckerci/woodpecker-cli:v3.18.0@sha256:cba80a18e41e29500cc72b81f788986aee3fbe4c2c9b1a0112aa0cc019e215",
+      "source": "https://github.com/woodpecker-ci/woodpecker",
+      "provenance": "Official CLI image; digest also pinned in the existing local CI runner"
+    },
+    {
+      "service": "woodpecker-runtime",
+      "reference": "docker.io/library/alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8",
+      "source": "https://hub.docker.com/_/alpine",
+      "provenance": "Pinned minimal shell runtime for file-based secret injection; upstream Woodpecker server binary is copied from its pinned image"
     }
   ]
 }

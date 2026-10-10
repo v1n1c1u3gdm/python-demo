@@ -17,6 +17,12 @@ RUN mkdir -p /app/api/logs
 EXPOSE 3000
 CMD ["/app/api/scripts/start-gunicorn.sh", "--config", "/app/api/gunicorn.conf.py", "-b", "0.0.0.0:3000", "-w", "4", "--threads", "4", "app:app"]
 
+# Local bootstrap reuses the API's hash-locked cryptography and requests dependencies.
+FROM api-app AS local-bootstrap
+COPY ci/__init__.py ci/local_bootstrap.py ci/local_keycloak.py ci/local_http.py \
+     ci/local_bookstack.py ci/local_gitea.py ci/local_woodpecker.py /opt/python-demo/ci/
+ENV PYTHONPATH=/opt/python-demo
+
 # -------- Vue build stage --------
 FROM node:24.11.1-alpine3.22@sha256:2867d550cf9d8bb50059a0fff528741f11a84d985c732e60e19e8e75c7239c43 AS ui-build
 WORKDIR /app
@@ -29,12 +35,20 @@ ARG VITE_AUTHORS_URL=http://localhost:3000/authors
 ARG VITE_ARTICLES_COUNT_URL=http://localhost:3000/articles/count_by_author
 ARG VITE_SOCIALS_URL=http://localhost:3000/socials
 ARG VITE_ARTICLE_PUBLIC_BASE_URL=https://viniciusmenezes.com
+ARG VITE_SSO_ENABLED=false
+ARG VITE_KEYCLOAK_URL=
+ARG VITE_KEYCLOAK_REALM=
+ARG VITE_KEYCLOAK_CLIENT_ID=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
     VITE_ARTICLES_URL=${VITE_ARTICLES_URL} \
     VITE_AUTHORS_URL=${VITE_AUTHORS_URL} \
     VITE_ARTICLES_COUNT_URL=${VITE_ARTICLES_COUNT_URL} \
     VITE_SOCIALS_URL=${VITE_SOCIALS_URL} \
-    VITE_ARTICLE_PUBLIC_BASE_URL=${VITE_ARTICLE_PUBLIC_BASE_URL}
+    VITE_ARTICLE_PUBLIC_BASE_URL=${VITE_ARTICLE_PUBLIC_BASE_URL} \
+    VITE_SSO_ENABLED=${VITE_SSO_ENABLED} \
+    VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL} \
+    VITE_KEYCLOAK_REALM=${VITE_KEYCLOAK_REALM} \
+    VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID}
 RUN npm run build
 
 # -------- Vue runtime stage --------

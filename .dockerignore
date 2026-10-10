@@ -20,3 +20,4 @@ ci/.env
 ci/credentials
 infra/.env
 infra/secrets
+infra/.local

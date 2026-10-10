@@ -1,5 +1,16 @@
 # Preparação Docker da aplicação
 
+O uso local padrão do repositório está em [`compose.yaml`](../compose.yaml): execute `docker compose up` a partir da raiz.
+Ele mantém bootstrap, CA, certificados e segredos técnicos em `infra/.local/` e `infra/secrets/local/`, integra UI,
+BookStack, Gitea e Woodpecker ao Keycloak e publica somente `https://app.localhost` em loopback. O login humano local é
+`admin` / `admin!123`; o agente/runner da CI e o exporter permanecem desativados. Consulte o
+[README principal](../README.md#ambiente-local-padr%C3%A3o-com-sso) para URLs, logs seguros, reinício, recriação e limites
+de logout/rotação.
+
+O restante deste documento descreve a stack **portátil/operacional** em `infra/compose/` e seu preflight separado; ela
+não substitui nem configura a stack Compose local padrão. Use esses scripts somente quando o objetivo for preparar
+explicitamente aquela composição portátil.
+
 Esta pasta contém composições separadas para API, UI, MySQL, Keycloak, serviços legados e gateway HTTPS. Elas não
 substituem o [`docker-compose.yml`](../docker-compose.yml), que continua atendendo ao desenvolvimento local. As stacks
 de serviço não publicam portas no host; o gateway expõe somente a porta TLS configurada, em loopback por padrão, e
@@ -139,7 +150,8 @@ alterar a senha do usuário do Keycloak, deve atualizar o arquivo externo corres
   `CI_WEB_NETWORK`, criada por essa composição. A configuração separada da CI deve consumir essa rede como externa após
   ela existir; `ci/compose.yaml` permanece utilizável sozinho. DNS do NGINX consulta Docker em tempo de requisição, então
   o servidor CI pode estar parado quando o gateway inicia.
-- A rota `/share` sempre responde 404. `/bookstack` também fica fechado até que o bootstrap da fixture crie a conta,
+- Na fixture portátil, a rota `/share` sempre responde 404. A rota `/bookstack` também fica fechada até que o bootstrap
+  crie a conta,
   substitua `admin@admin.com` / `password` e valide a nova senha. Só então configure
   `BOOKSTACK_BOOTSTRAP_CONFIRMED=true`; a opção seleciona a rota no início do container e não altera senha alguma.
 - Para iniciar o gateway, preencha `GATEWAY_PROJECT`, `CI_WEB_NETWORK`, certificados e host no `.env`, confirme os
@@ -170,7 +182,8 @@ caminhos `*_FILE` e `SHARE_DATA_DIRECTORY` em `infra/.env`; os arquivos devem ex
 verbatim enquanto a imagem MariaDB interpreta `_FILE`. O preflight rejeita a diferença antes de iniciar serviços.
 
 Use `infra/scripts/up-legacy.sh` somente com arquivos e volumes novos e sintéticos. A imagem LinuxServer do BookStack
-cria a conta inicial `admin@admin.com` com senha `password` em um banco vazio. Esse comportamento confirmado torna a
+cria a conta inicial `admin@admin.com` com senha `password` em um banco vazio dessa fixture portátil; o Compose local
+padrão usa OIDC Keycloak e não depende dessa conta. Esse comportamento confirmado torna a
 stack inadequada para exposição: antes de encaminhar qualquer rota para BookStack, o operador precisa concluir o
 bootstrap, trocar essa senha e validar as credenciais administrativas. A fixture de integração usa a conta apenas dentro
 de um projeto isolado sem portas publicadas; ela não é uma configuração de implantação.
