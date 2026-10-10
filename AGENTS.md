@@ -127,12 +127,13 @@ Estas regras se aplicam a todo o repositório e a todos os agentes e subagentes.
 
 ## Modelos e subagentes
 
-- Preferir o modelo **Luna com esforço de raciocínio médio** para orquestração, planejamento, implementação, revisão,
-  integração e validação.
+- Quando Sol for usado para orquestração, planejamento, revisão, integração ou validação, preferir esforço de raciocínio
+  **baixo**. Manter Luna com esforço **médio** para implementação e subagentes de implementação, e preservar Luna médio
+  nas demais funções em que já for a preferência aplicável.
 - Usar os identificadores de modelo suportados pelo ambiente; definir explicitamente modelo e esforço ao despachar
   subagentes. Não presumir que seja possível trocar o modelo da sessão atual.
-- Se Luna não estiver disponível para alguma função, comunicar a limitação e usar a alternativa disponível mais
-  próxima, mantendo as mesmas regras de qualidade; não presumir que seja possível trocar o modelo da sessão atual.
+- Se o modelo preferido para uma função não estiver disponível, comunicar a limitação e usar a alternativa disponível
+  mais próxima, mantendo as mesmas regras de qualidade; não presumir que seja possível trocar o modelo da sessão atual.
 - Fornecer a cada subagente requisitos, escopo, arquivos sob sua responsabilidade, critérios de aceitação e estas
   instruções. Evitar alterações concorrentes nos mesmos arquivos.
 - O orquestrador deve revisar o diff, integrar as entregas e validar os testes e a cobertura por conta própria.

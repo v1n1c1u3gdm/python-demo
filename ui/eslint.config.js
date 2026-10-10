@@ -13,6 +13,14 @@ export default [
     }
   },
   {
+    files: ['**/*.{js,vue}'],
+    rules: { complexity: ['error', 10] }
+  },
+  {
+    files: ['tests/**/*.{js,vue}'],
+    rules: { complexity: 'off' }
+  },
+  {
     files: ['tests/**/*.js'],
     languageOptions: {
       globals: globals.vitest

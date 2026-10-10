@@ -21,8 +21,8 @@ flowchart LR
 ```
 
 A SPA é entregue pelo NGINX, mas suas chamadas à API saem do navegador. `ui/nginx.conf` não configura proxy da API. O
-Compose expõe UI em 8080, API em 3000, MySQL em 3306 e Keycloak em 8081. Não existe uma pasta `db/`: o banco é definido
-como serviço no Compose, com volume `mysql_data`.
+Compose de desenvolvimento expõe UI em 8080, API em 3000, MySQL em 3306 e Keycloak em 8081. Não existe uma pasta
+`db/`: o banco é definido como serviço no Compose, com volume `mysql_data`.
 
 ## Mapa de pastas e arquivos principais
 
@@ -34,8 +34,14 @@ como serviço no Compose, com volume `mysql_data`.
 | `ROADMAP.md` | Expectativas, dependências, critérios de conclusão e decisões pendentes das próximas fases. Não substitui a descrição da arquitetura atual. |
 | `CHANGELOG.md` | Mudanças para pessoas; distingue alterações pendentes de histórico reconstruído. |
 | `adrs/` | Decisões numeradas e cumulativas, com evidências, contexto e consequências. |
-| `Dockerfile` | Estágios `api-app`, `ui-build` e `ui-app`; Python 3.14.7, build Node 24 e runtime NGINX. |
-| `docker-compose.yml` | Serviços `api`, `api-init`, `ui`, `db` e `keycloak`; collector OTLP opcional no perfil `telemetry`, sem porta publicada no host. |
+| `Dockerfile` | Estágios `api-app`, `ui-build` e `ui-app`; Python 3.14.7, build Node 24 e runtime NGINX. O estágio da API inclui o helper de runtime `ci/stack_config.py`. |
+| `docker-compose.yml` | Serviços de desenvolvimento `api`, `api-init`, `ui`, `db` e `keycloak`; collector OTLP opcional no perfil `telemetry`. |
+| `infra/compose/app.yaml` | Stack portátil da aplicação, com MySQL persistente, API/init/UI e Keycloak; redes de dados interna e web compartilhável, sem portas de host. |
+| `infra/compose/legacy.yaml` | Fixture isolada para BookStack/MariaDB, Gitea e share fechado; volumes próprios, nenhum dado de origem presumido e nenhuma porta publicada. |
+| `infra/compose/ci.yaml` | Overlay portátil do Woodpecker; alias do servidor na rede web do gateway, exporter construído na imagem e runner não iniciado. |
+| `infra/scripts/up-local.sh` | Preflight único de configuração, segredos, TLS e renderização das stacks antes de iniciar aplicação, legados, gateway e CI. |
+| `infra/images.json` | Tags, digests, plataformas e fontes das imagens usadas pela stack portátil. |
+| `infra/README.md` | Configuração local, arquivos externos de segredo, comandos da stack e limites da prova. |
 | `LICENSE` | Licença MIT atual. |
 | `.dockerignore` | Evita enviar dependências, planos locais e artefatos gerados ao contexto Docker. |
 | `.gitignore` | Exclusões de dependências, ambientes, artefatos gerados e planos/specs locais em `docs/`. |
@@ -43,6 +49,7 @@ como serviço no Compose, com volume `mysql_data`.
 | `.markdownlint-cli2.jsonc` | Coleta de Markdown e convenções de lint para prosa, tabelas e changelog. |
 | `.cursorrules` | Instruções legadas do Cursor; contém referências antigas e centralização documental incompatível com a solicitação atual. A solicitação explícita de documentos separados prevalece. |
 | `data/coverage/pytest-report.xml` | Relatório JUnit histórico versionado; não comprova cobertura nem execução atual. |
+| `ci/` | Bootstrap verificado de ferramentas, sete gates estáticos/de testes/build, avaliação separada da cobertura de linhas API/UI/CI, estado por gate, consolidação JSON, retenção local de relatórios, runner local e contratos/runtime da stack portátil. `setup-firewall.sh`/`firewall_setup.py` preparam um arquivo nftables privado após inventário de bridges e validação de sintaxe em namespace, sem aplicar regras. |
 
 ### API: `api/`
 
@@ -52,8 +59,8 @@ como serviço no Compose, com volume `mysql_data`.
 | `bootstrap.py` | Comando Flask `bootstrap-db`, que aplica migrations e seeds explicitamente antes de servir requisições. |
 | `config.py` | Configuração por ambiente, banco, logs, Swagger, Keycloak e exportação OTLP opcional. `TestConfig` usa SQLite em memória por padrão. |
 | `extensions.py` | Instâncias compartilhadas de SQLAlchemy e Flask-Migrate. |
-| `requirements.txt` e `requirements-dev.txt` | Dependências Python fixadas; o arquivo de desenvolvimento inclui pytest-cov e Ruff. |
-| `pyproject.toml` | Configuração Ruff e cobertura de linhas de toda a produção Python, incluindo migrations. |
+| `requirements.txt` e `requirements-dev.txt` | Exports gerados com hashes a partir de `pyproject.toml` e `uv.lock`; não editar como listas independentes. |
+| `pyproject.toml` e `uv.lock` | Fonte de verdade das dependências Python com Python 3.14.7, `package = false`, grupo dev e configuração Ruff/cobertura de produção incluindo migrations. |
 | `logging_config.py` e `logs/` | Configuração dos logs HTTP/SQLAlchemy e diretório de saída; `.gitkeep` preserva a pasta. |
 | `blueprints/__init__.py` | Registro dos blueprints da aplicação. |
 | `blueprints/articles.py` | CRUD de artigos e agregação `/articles/count_by_author`; consultas e transações estão no próprio blueprint. |
@@ -96,7 +103,7 @@ como serviço no Compose, com volume `mysql_data`.
 
 | Caminho | Função e quando alterar |
 | --- | --- |
-| `package.json` e `package-lock.json` | Dependências, scripts e resolução de versões; `test:unit` executa Vitest com cobertura. |
+| `package.json` e `package-lock.json` | Dependências, scripts e resolução de versões; `npm ci` instala o lock e `test:unit` exporta cobertura JSON de linhas para o gate. |
 | `vite.config.js` e `jsconfig.json` | Build Vite, integração Vitest e resolução de imports. |
 | `eslint.config.js` | Regras ESLint para JavaScript, Vue 3 e testes Vitest. |
 | `.env.production` | Variáveis de build da UI; não constitui configuração dinâmica do NGINX. |
@@ -140,6 +147,48 @@ sem reescrita automática do banco. Admin pode optar explicitamente por armazena
 confiável e pode executar código no navegador. Para artigos, o controle da UI é restrito ao painel admin e usa checkbox
 mais ação `Salvar`. A Fase 7 ainda cobre CRUD/editor editorial e permanece planejada. Consulte os
 [ADRs-0053](adrs/ADR-0053.md) e [0054](adrs/ADR-0054.md).
+
+### Stack Docker portátil da aplicação
+
+`docker-compose.yml` continua sendo a configuração de desenvolvimento com credenciais demonstrativas e portas locais.
+`infra/compose/app.yaml` prepara a API, o serviço `app-init`, a UI e Keycloak em imagens de build ou digests fixos, sem
+montar o código-fonte nem publicar portas no host. A rede interna `app_data` contém o MySQL e os serviços que precisam
+acessá-lo; a rede `app_web` expõe os aliases `app-api`, `app-ui` e `app-keycloak` ao gateway NGINX separado em
+`infra/compose/gateway.yaml`. O gateway une somente redes web e cria a rede `ci_web` para o servidor Woodpecker.
+
+A preparação compartilha uma instância MySQL 8.4 entre a API e o Keycloak, com usuários e schemas separados. O
+provisionamento Keycloak cria ou atualiza apenas `keycloak.*`; credenciais são lidas de arquivos montados e os valores
+de senha são enviados por parâmetros PyMySQL. O volume MySQL é persistente e exclusivo da stack. Consulte
+[ADR-0069](adrs/ADR-0069.md).
+
+O Keycloak usa `start`, banco MySQL, caminho interno `/auth`, hostname HTTPS explícito e cabeçalhos de proxy. A API usa
+`http://app-keycloak:8080/auth` para iniciar a descoberta e valida o issuer externo
+`https://${PUBLIC_HOST}/auth/realms/python-demo`. Metadados, tokens e JWKS passam pelo gateway usando o bundle CA
+configurado em `GATEWAY_TLS_CA_FILE`; a API não desativa a validação TLS. A UI compila as rotas `/api/*` para o mesmo
+gateway. A configuração ainda é preparação local e não representa deploy ou migração.
+
+O gateway envia `/api` ao serviço sem o prefixo e preserva `/auth` e `/ci`; remove `/bookstack` ao encaminhar ao
+BookStack, cuja `APP_URL` mantém o prefixo nos links e redirects externos. `/git` também é removido antes do Gitea, cuja
+`ROOT_URL` mantém esse prefixo. O resolvedor Docker reconsulta aliases a cada dez segundos para permitir que
+Woodpecker esteja parado durante a inicialização do gateway. A rota `/share` responde 404 sempre. BookStack responde
+404 até `BOOKSTACK_BOOTSTRAP_CONFIRMED=true`, definido somente após substituir e validar a senha inicial. A fixture
+local usa certificado sintético e porta HTTPS em loopback; não comprova firewall, DNS, TLS externo ou instalação na VPS.
+O container tem filesystem somente leitura e mantém apenas as capabilities de leitura da chave TLS, ownership de cache,
+bind da porta e troca para workers sem privilégios.
+Consulte [ADR-0073](adrs/ADR-0073.md).
+
+### Fixture isolada dos serviços legados
+
+`infra/compose/legacy.yaml` mantém BookStack/MariaDB, Gitea e o share em projetos, redes e volumes separados da stack
+principal. BookStack usa `/config` persistente e uma chave Laravel explícita; MariaDB 11.4.13 atende o requisito mínimo
+publicado de MariaDB 10.6 para uma fixture nova. A compatibilidade ou migração de uma origem MariaDB 10.5 não foi
+comprovada. BookStack/LinuxServer cria `admin@admin.com` / `password` no bootstrap de banco vazio, então essa conta
+precisa ser trocada antes de qualquer exposição por gateway.
+
+Gitea usa a imagem oficial e `/data` como volume completo; SQLite é somente a configuração da fixture vazia e não é uma
+afirmação sobre a instalação de origem. A rede de dados é interna, nenhum serviço publica porta no host, e o share fica
+montado read-only com NGINX configurado para negar todas as requisições. Consulte
+[ADR-0070](adrs/ADR-0070.md), [ADR-0071](adrs/ADR-0071.md) e [ADR-0072](adrs/ADR-0072.md).
 
 ## Fluxos e contratos a preservar
 
@@ -224,12 +273,12 @@ a um release identificado.
   descritos nos ADRs 0053–0054. Qualquer ampliação de conteúdo HTML deve reavaliar allowlist e autorização.
 - Desenvolvimento mantém credenciais de demonstração; em `FLASK_ENV=production`, DSN MySQL e configuração explícita
   Keycloak são exigidos e defaults demonstrativos são rejeitados. Isso não prova deploy real.
-- O Keycloak roda em `start-dev`; o Compose não define dependência/healthcheck dele para a API e não configura banco
-  externo para o Keycloak. Sua dependência `db` não equivale a persistência no MySQL.
+- O Compose da raiz mantém Keycloak em `start-dev` para desenvolvimento. A preparação em `infra/compose/app.yaml` usa
+  Keycloak `start` e banco persistente separado da API por schema e usuário; o gateway preserva o issuer externo HTTPS.
 - A validação JWT exige issuer e audience conforme o [ADR-0051](adrs/ADR-0051.md); não há exceção `verify_aud=False` na
   política atual.
-- Há credenciais de demonstração na configuração. O mapa descreve o ambiente existente e não constitui arquitetura de
-  produção validada.
+- A configuração da raiz mantém credenciais de demonstração. A stack portátil exige configuração e segredos externos;
+  ambas descrevem ambientes locais, sem constituir arquitetura de produção validada.
 
 Atualizar este mapa quando houver mudanças de estrutura ou fluxo e registrar novas decisões em ADRs, preservando os
 registros anteriores.
@@ -237,12 +286,21 @@ registros anteriores.
 ## Evolução planejada
 
 O [ROADMAP](ROADMAP.md) organiza a evolução futura, separando escolhas alinhadas de propostas pendentes.
-Os [ADRs 0038](adrs/ADR-0038.md) a [0045](adrs/ADR-0045.md) registram decisões de planejamento;
-a aceitação dessas escolhas não significa que a pipeline, o cofre, o tapume ou os novos gates já estejam implementados.
-
-A escolha da plataforma de CI, o editor visual e a autorização das operações de escrita continuam sujeitos ao desenho
-e ao alinhamento das fases correspondentes. O bootstrap por serviço init está implementado e registrado no
-[ADR-0048](adrs/ADR-0048.md), que substitui o registro histórico [ADR-0010](adrs/ADR-0010.md).
+Os [ADRs 0038](adrs/ADR-0038.md) a [0045](adrs/ADR-0045.md) e os [ADRs 0058](adrs/ADR-0058.md) a
+[0066](adrs/ADR-0066.md) registram decisões aceitas de planejamento. A definição Woodpecker inicializa versões
+pinadas e instala Python por `uv.lock` e JavaScript por `npm ci`; os sete gates preservam logs e relatórios em diretório
+próprio da identidade commit/execução. `run-gate.sh` grava estado atômico por gate, e o coletor valida os sete estados,
+identidade e relatórios essenciais, marcando gates ausentes como `not_run`; falha, cancelamento, timeout e resultado
+incompleto retornam erro. O runner local imprime o resumo e mantém XML/JSON no diretório de relatórios. A retenção local
+remove execuções concluídas após 14 dias ou quando excedem o orçamento lógico de 1 GB, sem alcançar diretórios externos.
+A etapa de resumo do workflow executa após sucesso ou falha; cancelamento abrupto pode deixar um gate em `running`, que
+o coletor trata como falha. O encaminhamento de stdout dos jobs para journald/syslog e a limpeza independente dos
+metadados do Woodpecker permanecem para a Tarefa 6. Isso valida comandos e fluxo local, sem declarar instalação do
+Woodpecker, aprovação real de PR, capacidade da VPS ou encaminhamento operacional de logs como implantados. O editor
+visual continua em discussão; outras propostas pendentes permanecem sujeitas ao desenho e alinhamento das fases
+correspondentes. O
+bootstrap por serviço init está implementado e registrado no [ADR-0048](adrs/ADR-0048.md), que substitui o registro
+histórico [ADR-0010](adrs/ADR-0010.md).
 
 ## Proteções de integração
 
@@ -253,3 +311,36 @@ Hoje somente o proprietário tem permissão de escrita; contribuições externas
 A criação de branches no repositório exige prefixos convencionais conforme [ADR-0047](adrs/ADR-0047.md).
 A regra valida o prefixo, não todo o kebab-case nem branches em forks externos. AGENTS.md mantém a convenção completa.
 Essas configurações ficam no GitHub; os ADRs documentam seu estado e não reaplicam regras em um clone.
+
+### Plano de controle CI em preparação
+
+A configuração local em [ci/README.md](ci/README.md) fixa Woodpecker 3.18.0, SQLite e agente com uma workflow.
+A política audita settings reais, objeto trusted, contas antigas e crons; o proxy preserva `/ci` e bloqueia
+manual/cron/restart nos endpoints da versão fixada. A auditoria é pontual, não um interlock contínuo.
+A rede adicional de controle não isola as redes dinâmicas dos jobs. O serviço opt-in `exporter` encaminha linhas reais
+das etapas via API autenticada para stdout; a unidade systemd de exemplo associa esse stdout a `LogNamespace=` e a
+configuração de journald limita a namespace. O token fica em arquivo privado fora do checkout/jobs. Retenção chama a
+API para remover apenas logs de pipelines terminais, mantendo metadados do pipeline; o cursor é privado e atômico, com
+semântica de possível repetição na janela entre stdout e cursor. SQLite/WAL e cópia no journal ocupam espaço físico
+separado; `VACUUM` e o custo físico continuam pendentes.
+
+O agente agora requer o profile explícito `runner`, enquanto o exporter requer `logs`; executar `up` sem profile não
+inicia o agente. Profiles são uma convenção Compose e não um interlock de execução ou prova de política live. A ativação
+real ainda depende de auditoria de drift/API, autorização de instalação, prova de rede e medição de capacidade.
+Na composição portátil, `infra/compose/ci.yaml` mantém o backend acessível pelo gateway como `ci-server`, sem porta
+publicada no host, e substitui os mounts de código do exporter por uma imagem derivada. `infra/scripts/up-local.sh`
+valida os modelos das stacks e os arquivos TLS antes de criar recursos, e bloqueia o profile `runner`. O collector OTLP
+existente pode ser habilitado em `infra/compose/app.yaml` com `OTEL_METRICS_ENABLED=true` e profile `telemetry`; a
+imagem/configuração permanecem as já registradas, sem endpoint publicado. Essa integração local não prova operação,
+isolamento real ou capacidade na VPS.
+O ADR-0067 acrescenta a preparação local de tabelas nftables próprias para INPUT, FORWARD e forwarding L2 entre portas
+de containers em bridges Docker, com renderer/preflight fail-closed e rollback limitado às tabelas próprias. O inventário
+confiável/CIDRs não foi preenchido para a VPS; integração com firewalld e Docker, DNS embutido, userland proxy,
+persistência e prova comportamental continuam pendentes. Nenhuma regra ou configuração do host foi aplicada; a
+preparação não comprova isolamento e não autoriza habilitar jobs.
+
+O ADR-0068 registra a escolha do usuário por Ubuntu Server 26.04 LTS em uma VPS nova de 8 GB. A VPS Fedora 34 atual é
+origem da migração, não destino; disponibilidade da imagem 26.04 pelo provedor e migração seguem pendentes. O script
+administrativo [ci/setup-firewall.sh](ci/setup-firewall.sh) coleta bridges com `ip`, compara-as com o inventário
+completo, verifica nftables usando `unshare` em namespace de usuário/rede e grava regras em arquivo privado por troca
+atômica. Ele nunca aplica regras e não presume compatibilidade de uma versão específica do sistema.

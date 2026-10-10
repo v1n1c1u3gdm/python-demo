@@ -1,0 +1,74 @@
+when:
+  event: pull_request
+clone:
+  git:
+    image: docker.io/woodpeckerci/plugin-git:2.10.0@sha256:0f06b03ec33137b556c77538563f66c400339052d0c5199d4c3ad1a2a37e1964
+    settings:
+      depth: 0
+      recursive: false
+steps:
+  secrets:
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh secrets
+  lint:
+    depends_on: [secrets]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh lint
+  security:
+    depends_on: [lint]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh security
+  quality:
+    depends_on: [security]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh quality
+  api:
+    depends_on: [quality]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh api
+  ui:
+    depends_on: [api]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh ui
+  build:
+    depends_on: [ui]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - ci/bootstrap.sh build
+  results:
+    depends_on: [build]
+    when:
+      - status: [success, failure]
+    image: docker.io/library/python:3.14.7@sha256:be8ccd085666c34273c9dc5607c9842f8b2e3116128aae45148ce164c07ce09d
+    environment:
+      CI_REPORTS_ROOT: .ci-reports
+      CI_RUN_ID: ${CI_PIPELINE_NUMBER}
+    commands:
+      - python -m ci.collect_results "$CI_REPORTS_ROOT/$CI_COMMIT_SHA-$CI_RUN_ID"

@@ -1,0 +1,1 @@
+synthetic share fixture for isolated Compose persistence tests

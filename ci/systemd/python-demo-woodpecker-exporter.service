@@ -1,0 +1,19 @@
+[Unit]
+Description=Forward Woodpecker job output to a dedicated system journal namespace
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/python-demo/ci
+EnvironmentFile=/etc/python-demo/woodpecker-exporter.env
+ExecStart=/usr/bin/docker compose -f compose.yaml --profile logs run --rm --no-deps exporter
+Restart=always
+RestartSec=10
+LogNamespace=python-demo-ci
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

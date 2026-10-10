@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "inventory_complete": false,
+  "trusted_bridges": [
+    "br-000000000000"
+  ],
+  "protected_bridge_cidrs": [
+    "172.30.0.0/16",
+    "fd00:30::/64"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "threshold": 5,
+  "minLines": 5,
+  "minTokens": 50,
+  "reporters": [
+    "console",
+    "json"
+  ],
+  "format": [
+    "python",
+    "javascript",
+    "vue",
+    "markup",
+    "css"
+  ],
+  "ignore": [
+    "**/node_modules/**",
+    "**/coverage/**",
+    "**/dist/**",
+    "**/api/tests/**"
+  ],
+  "absolute": true,
+  "gitignore": true
+}

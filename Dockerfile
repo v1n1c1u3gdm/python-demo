@@ -1,4 +1,4 @@
-FROM python:3.14.7-slim AS api-app
+FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS api-app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -7,18 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app/api
 
-RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends \
-      build-essential \
-      curl \
-      git \
-      libffi-dev \
-      libssl-dev && \
-    rm -rf /var/lib/apt/lists/*
-
 COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY api/ .
+COPY ci/stack_config.py /opt/python-demo/stack_config.py
 
 RUN mkdir -p /app/api/logs
 
@@ -26,7 +18,7 @@ EXPOSE 3000
 CMD ["/app/api/scripts/start-gunicorn.sh", "--config", "/app/api/gunicorn.conf.py", "-b", "0.0.0.0:3000", "-w", "4", "--threads", "4", "app:app"]
 
 # -------- Vue build stage --------
-FROM node:24-alpine AS ui-build
+FROM node:24.11.1-alpine3.22@sha256:2867d550cf9d8bb50059a0fff528741f11a84d985c732e60e19e8e75c7239c43 AS ui-build
 WORKDIR /app
 COPY ui/package*.json ./
 RUN npm ci
@@ -46,7 +38,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
 RUN npm run build
 
 # -------- Vue runtime stage --------
-FROM nginx:stable-alpine AS ui-app
+FROM nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94 AS ui-app
 COPY --from=ui-build /app/dist /usr/share/nginx/html
 COPY ui/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
