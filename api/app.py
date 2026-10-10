@@ -146,8 +146,12 @@ def _flatten_errors(messages):
     return [str(messages)]
 
 
+def run_development_server(flask_app: Flask) -> None:
+    flask_app.run(host="127.0.0.1", port=5000)
+
+
 app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    run_development_server(app)

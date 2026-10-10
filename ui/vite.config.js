@@ -20,7 +20,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{js,vue}'],
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json-summary'],
+      reportsDirectory: process.env.VITEST_COVERAGE_DIR || 'coverage',
       thresholds: { lines: 85 }
     }
   }

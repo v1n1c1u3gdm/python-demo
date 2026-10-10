@@ -1,0 +1,230 @@
+name: ${STACK_PROJECT:?STACK_PROJECT is required}
+
+services:
+  app-mysql:
+    image: mysql:8.4.11@sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242
+    command: ["--sql_generate_invisible_primary_key=OFF"]
+    environment:
+      MYSQL_DATABASE: python_demo
+      MYSQL_USER: python_demo_api
+      MYSQL_PASSWORD_FILE: /run/secrets/api_db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets:
+      - api_db_password
+      - mysql_root_password
+    volumes:
+      - app_mysql_data:/var/lib/mysql
+      - app_mysql_socket:/var/run/mysqld
+    networks:
+      app_data:
+        aliases:
+          - app-mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --silent --host=127.0.0.1 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  app-keycloak-db-init:
+    image: python-demo-api:portable
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api-app
+    entrypoint: ["python", "/opt/python-demo/stack_config.py"]
+    command: ["provision-keycloak-db"]
+    environment:
+      MYSQL_ADMIN_SOCKET: /var/run/mysqld/mysqld.sock
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      KEYCLOAK_DB_PASSWORD_FILE: /run/secrets/keycloak_db_password
+    secrets:
+      - mysql_root_password
+      - keycloak_db_password
+    volumes:
+      - app_mysql_socket:/var/run/mysqld
+    networks:
+      - app_data
+    depends_on:
+      app-mysql:
+        condition: service_healthy
+    restart: "no"
+
+  app-init:
+    image: python-demo-api:portable
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api-app
+    entrypoint: ["python", "/opt/python-demo/stack_config.py"]
+    command: ["run-init"]
+    environment: &api_runtime_environment
+      API_DB_HOST: app-mysql
+      API_DB_NAME: python_demo
+      API_DB_USER: python_demo_api
+      API_DB_PASSWORD_FILE: /run/secrets/api_db_password
+      FLASK_ENV: production
+      KEYCLOAK_BASE_URL: http://app-keycloak:8080/auth
+      KEYCLOAK_ISSUER: https://${PUBLIC_HOST:?PUBLIC_HOST is required}/auth/realms/python-demo
+      KEYCLOAK_REALM: python-demo
+      KEYCLOAK_CLIENT_ID: python-demo-api
+      KEYCLOAK_CLIENT_SECRET_FILE: /run/secrets/keycloak_client_secret
+      KEYCLOAK_AUDIENCE: python-demo-api
+      KEYCLOAK_ADMIN_ROLE: admin
+      KEYCLOAK_AUTHOR_ROLE: author
+      LOG_DIR: /tmp/python-demo-logs
+    secrets:
+      - api_db_password
+      - keycloak_client_secret
+    networks:
+      - app_data
+    depends_on:
+      app-mysql:
+        condition: service_healthy
+    restart: "no"
+
+  app-api:
+    image: python-demo-api:portable
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api-app
+    entrypoint: ["python", "/opt/python-demo/stack_config.py"]
+    command: ["run-api"]
+    environment:
+      <<: *api_runtime_environment
+      PROMETHEUS_MULTIPROC_DIR: /tmp/python-demo-prometheus-${STACK_PROJECT:?STACK_PROJECT is required}
+      OTEL_METRICS_ENABLED: ${OTEL_METRICS_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: http://otel-collector:4318/v1/metrics
+      REQUESTS_CA_BUNDLE: /run/certs/public-ca.pem
+    secrets:
+      - api_db_password
+      - keycloak_client_secret
+    volumes:
+      - type: bind
+        source: ${GATEWAY_TLS_CA_FILE:?GATEWAY_TLS_CA_FILE is required}
+        target: /run/certs/public-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
+          selinux: z
+    networks:
+      app_web:
+        aliases:
+          - app-api
+      app_data: {}
+    depends_on:
+      app-mysql:
+        condition: service_healthy
+      app-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  app-ui:
+    image: python-demo-ui:portable
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ui-app
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_ARTICLES_URL: /api/articles
+        VITE_AUTHORS_URL: /api/authors
+        VITE_ARTICLES_COUNT_URL: /api/articles/count_by_author
+        VITE_SOCIALS_URL: /api/socials
+        VITE_ARTICLE_PUBLIC_BASE_URL: https://${PUBLIC_HOST:?PUBLIC_HOST is required}
+    networks:
+      app_web:
+        aliases:
+          - app-ui
+    depends_on:
+      app-api:
+        condition: service_started
+    restart: unless-stopped
+
+  app-keycloak:
+    image: python-demo-keycloak:26.4.7
+    build:
+      context: .
+      dockerfile: infra/keycloak/Dockerfile
+    command: ["start"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:?KC_BOOTSTRAP_ADMIN_USERNAME is required}
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://app-mysql:3306/keycloak?characterEncoding=UTF-8
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD_FILE: /run/secrets/keycloak_db_password
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: https://${PUBLIC_HOST:?PUBLIC_HOST is required}/auth
+      KC_HOSTNAME_STRICT: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/keycloak_admin_password
+    secrets:
+      - keycloak_db_password
+      - keycloak_admin_password
+    networks:
+      app_web:
+        aliases:
+          - app-keycloak
+      app_data: {}
+    depends_on:
+      app-keycloak-db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  otel-collector:
+    profiles: [telemetry]
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.159.0@sha256:1f2c54a30e713fac6b3ae77a1ec84010c2007e29ced8ec666214fc2f6739c1cc
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - type: bind
+        source: ./api/observability/otel-collector.yaml
+        target: /etc/otelcol-contrib/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+    mem_limit: 128m
+    networks:
+      app_web:
+        aliases:
+          - otel-collector
+
+networks:
+  app_web:
+    name: ${APP_WEB_NETWORK:?APP_WEB_NETWORK is required}
+    driver: bridge
+  app_data:
+    name: ${APP_DATA_NETWORK:?APP_DATA_NETWORK is required}
+    driver: bridge
+    internal: true
+
+volumes:
+  app_mysql_data:
+    name: ${STACK_PROJECT:?STACK_PROJECT is required}_mysql
+  app_mysql_socket:
+    name: ${STACK_PROJECT:?STACK_PROJECT is required}_mysql_socket
+
+secrets:
+  api_db_password:
+    file: ${API_DB_PASSWORD_FILE:?API_DB_PASSWORD_FILE is required}
+  mysql_root_password:
+    file: ${MYSQL_ROOT_PASSWORD_FILE:?MYSQL_ROOT_PASSWORD_FILE is required}
+  keycloak_db_password:
+    file: ${KEYCLOAK_DB_PASSWORD_FILE:?KEYCLOAK_DB_PASSWORD_FILE is required}
+  keycloak_client_secret:
+    file: ${KEYCLOAK_CLIENT_SECRET_FILE:?KEYCLOAK_CLIENT_SECRET_FILE is required}
+  keycloak_admin_password:
+    file: ${KEYCLOAK_ADMIN_PASSWORD_FILE:?KEYCLOAK_ADMIN_PASSWORD_FILE is required}

@@ -1,6 +1,6 @@
 {
   "globs": ["**/*.md"],
-  "ignores": ["**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/coverage/**", ".superpowers/**"],
+  "ignores": ["**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/coverage/**", "**/.ci-tools/**", "**/.ci-reports/**", ".superpowers/**"],
   "config": {
     "MD013": {
       "line_length": 120,

@@ -14,3 +14,9 @@ node_modules
 **/dist
 api/logs
 data/coverage
+.ci-tools
+.ci-reports
+ci/.env
+ci/credentials
+infra/.env
+infra/secrets

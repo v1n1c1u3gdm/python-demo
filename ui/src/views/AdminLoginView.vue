@@ -284,6 +284,12 @@ export default {
         this.isProfileLoading = false
       }
     },
+    isCurrentOperation(operation, token) {
+      return operation === this.bypassOperation && this.session?.access_token === token
+    },
+    isCurrentAdminOperation(operation, token) {
+      return this.isCurrentOperation(operation, token) && this.isAdmin
+    },
     async loadAdminArticles() {
       if (!this.isAdmin || !this.session?.access_token) return
       const token = this.session.access_token
@@ -292,15 +298,15 @@ export default {
 
       try {
         const articles = await fetchArticles({ force: true })
-        if (operation === this.bypassOperation && this.session?.access_token === token && this.isAdmin) {
+        if (this.isCurrentAdminOperation(operation, token)) {
           this.adminArticles = articles
         }
       } catch (error) {
-        if (operation === this.bypassOperation && this.session?.access_token === token) {
+        if (this.isCurrentOperation(operation, token)) {
           this.errorMessage = error?.message || 'Não foi possível carregar os artigos.'
         }
       } finally {
-        if (operation === this.bypassOperation) this.isArticlesLoading = false
+        if (this.isCurrentOperation(operation, token)) this.isArticlesLoading = false
       }
     },
     selectArticle() {
@@ -308,8 +314,21 @@ export default {
       this.bypassStatus = null
       this.draftBypassSanitization = Boolean(this.selectedArticle?.bypass_sanitization)
     },
+    applyArticleBypassUpdate(articleId, updatedArticle) {
+      this.adminArticles = this.adminArticles.map(article =>
+        article.id === articleId ? updatedArticle : article
+      )
+      this.draftBypassSanitization = Boolean(updatedArticle.bypass_sanitization)
+      this.bypassStatus = 'Bypass atualizado.'
+    },
+    restoreArticleBypassAfterFailure() {
+      this.draftBypassSanitization = Boolean(this.selectedArticle?.bypass_sanitization)
+    },
+    canSaveArticleBypass() {
+      return this.isAdmin && Boolean(this.selectedArticle && this.session?.access_token) && !this.isBypassSaving
+    },
     async saveArticleBypass() {
-      if (!this.isAdmin || !this.selectedArticle || !this.session?.access_token || this.isBypassSaving) return
+      if (!this.canSaveArticleBypass()) return
       const articleId = this.selectedArticle.id
       const token = this.session.access_token
       const operation = this.bypassOperation
@@ -323,18 +342,14 @@ export default {
           this.draftBypassSanitization,
           token
         )
-        if (operation !== this.bypassOperation || this.session?.access_token !== token) return
-        this.adminArticles = this.adminArticles.map(article =>
-          article.id === articleId ? updatedArticle : article
-        )
-        this.draftBypassSanitization = Boolean(updatedArticle.bypass_sanitization)
-        this.bypassStatus = 'Bypass atualizado.'
+        if (!this.isCurrentOperation(operation, token)) return
+        this.applyArticleBypassUpdate(articleId, updatedArticle)
       } catch (error) {
-        if (operation !== this.bypassOperation || this.session?.access_token !== token) return
-        this.draftBypassSanitization = Boolean(this.selectedArticle?.bypass_sanitization)
+        if (!this.isCurrentOperation(operation, token)) return
+        this.restoreArticleBypassAfterFailure()
         this.errorMessage = error?.message || 'Não foi possível atualizar o bypass.'
       } finally {
-        if (operation === this.bypassOperation) this.isBypassSaving = false
+        if (this.isCurrentOperation(operation, token)) this.isBypassSaving = false
       }
     },
     handleLogout() {

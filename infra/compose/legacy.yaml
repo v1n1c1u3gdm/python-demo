@@ -1,0 +1,139 @@
+name: ${STACK_PROJECT:?STACK_PROJECT is required}
+
+services:
+  legacy-mariadb:
+    image: docker.io/library/mariadb:11.4.13@sha256:f2f5e00999bd335343e09091e27e39c9386eb1822efcd0e0bac40b0003fa47e3
+    platform: linux/amd64
+    environment:
+      MARIADB_DATABASE: bookstack
+      MARIADB_USER: bookstack
+      MARIADB_PASSWORD_FILE: /run/secrets/bookstack_db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/mariadb_root_password
+    secrets:
+      - bookstack_db_password
+      - mariadb_root_password
+    volumes:
+      - type: volume
+        source: legacy_mariadb_data
+        target: /var/lib/mysql
+    networks:
+      legacy_data:
+        aliases:
+          - legacy-mariadb
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  legacy-bookstack:
+    image: lscr.io/linuxserver/bookstack:version-v26.09.1@sha256:9b5cd22653b503a53a764671ed96e2e87ea3f62bc3fba6250de86a73d642c426
+    platform: linux/amd64
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      APP_URL: ${BOOKSTACK_URL:?BOOKSTACK_URL is required}
+      FILE__APP_KEY: /run/secrets/bookstack_app_key
+      DB_HOST: legacy-mariadb
+      DB_PORT: "3306"
+      DB_USERNAME: bookstack
+      FILE__DB_PASSWORD: /run/secrets/bookstack_db_password
+      DB_DATABASE: bookstack
+    secrets:
+      - bookstack_app_key
+      - bookstack_db_password
+    volumes:
+      - type: volume
+        source: legacy_bookstack_config
+        target: /config
+    networks:
+      legacy_web:
+        aliases:
+          - legacy-bookstack
+      legacy_data: {}
+    depends_on:
+      legacy-mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/login || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  legacy-gitea:
+    image: docker.gitea.com/gitea:1.27.3@sha256:d584940b7143982682ac4541509dd628506c2b568221e6af41e5a2ead1de4fe7
+    platform: linux/amd64
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /data/gitea/gitea.db
+      GITEA__server__DOMAIN: ${PUBLIC_HOST:?PUBLIC_HOST is required}
+      GITEA__server__ROOT_URL: ${GITEA_ROOT_URL:?GITEA_ROOT_URL is required}
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__SSH_DOMAIN: ${PUBLIC_HOST:?PUBLIC_HOST is required}
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__security__INSTALL_LOCK: "true"
+    volumes:
+      - type: volume
+        source: legacy_gitea_data
+        target: /data
+    networks:
+      legacy_web:
+        aliases:
+          - legacy-gitea
+    restart: unless-stopped
+
+  legacy-share:
+    image: nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+    platform: linux/amd64
+    volumes:
+      - type: bind
+        source: infra/share/default.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+      - type: bind
+        source: ${SHARE_DATA_DIRECTORY:?SHARE_DATA_DIRECTORY is required}
+        target: /usr/share/nginx/html
+        read_only: true
+    networks:
+      legacy_web:
+        aliases:
+          - legacy-share
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    restart: unless-stopped
+
+networks:
+  legacy_web:
+    name: ${LEGACY_WEB_NETWORK:?LEGACY_WEB_NETWORK is required}
+    driver: bridge
+  legacy_data:
+    name: ${LEGACY_DATA_NETWORK:?LEGACY_DATA_NETWORK is required}
+    driver: bridge
+    internal: true
+
+volumes:
+  legacy_mariadb_data:
+    name: ${STACK_PROJECT:?STACK_PROJECT is required}_mariadb
+  legacy_bookstack_config:
+    name: ${STACK_PROJECT:?STACK_PROJECT is required}_bookstack
+  legacy_gitea_data:
+    name: ${STACK_PROJECT:?STACK_PROJECT is required}_gitea
+
+secrets:
+  bookstack_app_key:
+    file: ${BOOKSTACK_APP_KEY_FILE:?BOOKSTACK_APP_KEY_FILE is required}
+  bookstack_db_password:
+    file: ${BOOKSTACK_DB_PASSWORD_FILE:?BOOKSTACK_DB_PASSWORD_FILE is required}
+  mariadb_root_password:
+    file: ${MARIADB_ROOT_PASSWORD_FILE:?MARIADB_ROOT_PASSWORD_FILE is required}

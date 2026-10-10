@@ -1,7 +1,9 @@
 import logging
+import runpy
 import sqlite3
 
 import pytest
+from flask import Flask
 
 import app as app_module
 from config import BaseConfig
@@ -233,3 +235,13 @@ def test_failed_seed_can_be_retried_without_persisting_seed_run(isolated_app, mo
     assert retry_result.exit_code == 0
     with app.app_context():
         assert SeedRun.query.filter_by(name=SEED_NAME).count() == 1
+
+
+def test_development_entrypoint_binds_only_to_loopback(monkeypatch):
+    """The direct Flask development server must not expose a public bind."""
+    calls = []
+    monkeypatch.setattr(Flask, "run", lambda self, **kwargs: calls.append(kwargs))
+
+    runpy.run_module("app", run_name="__main__")
+
+    assert calls == [{"host": "127.0.0.1", "port": 5000}]

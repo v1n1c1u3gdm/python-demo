@@ -192,24 +192,27 @@ export default {
       const articles = await fetchArticles()
       return articles[0]
     },
+    firstTruthy(value, fallback) {
+      return value || fallback()
+    },
     normalizeArticle(articleData) {
       if (!articleData) {
         return null
       }
 
-      const authorName = articleData.author?.name || 'Autor desconhecido'
-      const datetime = articleData.created_at || articleData.updated_at || new Date().toISOString()
+      const authorName = this.firstTruthy(articleData.author?.name, () => 'Autor desconhecido')
+      const datetime = this.firstTruthy(articleData.created_at, () => this.firstTruthy(articleData.updated_at, () => new Date().toISOString()))
 
-      const heroImage = articleData.hero_image || articleData.author?.photo_url || this.getDefaultHeroImage()
-      const slug = articleData.slug || null
+      const heroImage = this.firstTruthy(articleData.hero_image, () => this.firstTruthy(articleData.author?.photo_url, () => this.getDefaultHeroImage()))
+      const slug = this.firstTruthy(articleData.slug, () => null)
       return {
         id: articleData.id,
         title: articleData.title,
         heroImage,
         heroSrcset: this.buildHeroSrcset(articleData, heroImage),
-        heroSizes: articleData.hero_sizes || '(min-width: 900px) 40vw, 100vw',
-        heroAlt: articleData.hero_alt || `Foto de ${authorName}`,
-        dateLabel: articleData.published_label || this.formatDate(datetime),
+        heroSizes: this.firstTruthy(articleData.hero_sizes, () => '(min-width: 900px) 40vw, 100vw'),
+        heroAlt: this.firstTruthy(articleData.hero_alt, () => `Foto de ${authorName}`),
+        dateLabel: this.firstTruthy(articleData.published_label, () => this.formatDate(datetime)),
         datetime,
         author: {
           name: authorName,

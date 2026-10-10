@@ -1,0 +1,52 @@
+services:
+  server:
+    ports: !override []
+    networks:
+      ci-control: {}
+      ci-web:
+        aliases:
+          - ci-server
+
+  exporter:
+    image: python-demo-ci-exporter:portable
+    build:
+      context: .
+      dockerfile: infra/ci-exporter.Dockerfile
+    depends_on: !override
+      server:
+        condition: service_started
+      exporter-state-init:
+        condition: service_completed_successfully
+    volumes: !override
+      - type: bind
+        source: ${CI_WOODPECKER_TOKEN_FILE:?Set an API token file outside the checkout}
+        target: /run/woodpecker-control/api-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - exporter-state:/var/lib/ci-log-exporter
+
+  exporter-state-init:
+    image: python-demo-ci-exporter:portable
+    build:
+      context: .
+      dockerfile: infra/ci-exporter.Dockerfile
+    user: "0:0"
+    entrypoint: [python, -m, ci.prepare_exporter_state]
+    restart: "no"
+    profiles: [logs]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+    volumes: !override
+      - exporter-state:/var/lib/ci-log-exporter
+
+networks:
+  ci-control:
+    name: ${CI_CONTROL_NETWORK:?Set CI_CONTROL_NETWORK to a private local network name}
+  ci-web:
+    name: ${CI_WEB_NETWORK:?Set CI_WEB_NETWORK to the gateway-owned web network}
+    external: true

@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "images": [
+    {
+      "service": "app-mysql",
+      "reference": "mysql:8.4.11@sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242",
+      "source": "https://github.com/docker-library/mysql",
+      "source_revision": "01f90d87012e46cd174073bba02d64e9fc693ed3",
+      "platforms": {
+        "linux/amd64": "sha256:80f4933e3835f9dc4d35a28ec500d7986cb4414e6c6821c5461239cb7beb8995",
+        "linux/arm64": "sha256:ca3f0494c0f1fc86eb45f5e4786a1bb9f64d2f85b562cc74a9595046f6519a42"
+      },
+      "provenance": "Docker Official Image; manifest-list digest resolved from registry on 2026-10-09"
+    },
+    {
+      "service": "app-api",
+      "reference": "python-demo-api:portable",
+      "source": "local build",
+      "dockerfile": "Dockerfile#api-app",
+      "base": "python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d",
+      "dependencies": "api/requirements.txt with hashes from api/uv.lock"
+    },
+    {
+      "service": "app-ui",
+      "reference": "python-demo-ui:portable",
+      "source": "local build",
+      "dockerfile": "Dockerfile#ui-app",
+      "build_base": "node:24.11.1-alpine3.22@sha256:2867d550cf9d8bb50059a0fff528741f11a84d985c732e60e19e8e75c7239c43",
+      "runtime_base": "nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+      "dependencies": "ui/package-lock.json"
+    },
+    {
+      "service": "gateway",
+      "reference": "python-demo-gateway:portable",
+      "source": "local build",
+      "dockerfile": "infra/nginx/Dockerfile",
+      "base": "nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+      "provenance": "NGINX official image pinned by the upstream manifest-list digest; local layer contains only gateway routes and the BookStack bootstrap gate"
+    },
+    {
+      "service": "app-keycloak",
+      "reference": "python-demo-keycloak:26.4.7",
+      "source": "local build",
+      "dockerfile": "infra/keycloak/Dockerfile",
+      "base": "quay.io/keycloak/keycloak:26.4.7@sha256:9409c59bdfb65dbffa20b11e6f18b8abb9281d480c7ca402f51ed3d5977e6007",
+      "upstream_release": "https://www.keycloak.org/2025/12/keycloak-2647-released"
+    },
+    {
+      "service": "app-keycloak-db-init",
+      "reference": "python-demo-api:portable",
+      "source": "local build",
+      "entrypoint": "ci/stack_config.py provision-keycloak-db",
+      "database_client": "PyMySQL from api/requirements.txt"
+    },
+    {
+      "service": "legacy-bookstack",
+      "reference": "lscr.io/linuxserver/bookstack:version-v26.09.1@sha256:9b5cd22653b503a53a764671ed96e2e87ea3f62bc3fba6250de86a73d642c426",
+      "source": "https://docs.linuxserver.io/images/docker-bookstack/",
+      "platforms": {
+        "linux/amd64": "sha256:9b5cd22653b503a53a764671ed96e2e87ea3f62bc3fba6250de86a73d642c426"
+      },
+      "provenance": "LinuxServer.io community image, documented by its maintainer and referenced by BookStack; amd64 manifest digest resolved on 2026-10-09"
+    },
+    {
+      "service": "legacy-mariadb",
+      "reference": "docker.io/library/mariadb:11.4.13@sha256:f2f5e00999bd335343e09091e27e39c9386eb1822efcd0e0bac40b0003fa47e3",
+      "source": "https://github.com/docker-library/mariadb",
+      "platforms": {
+        "linux/amd64": "sha256:f2f5e00999bd335343e09091e27e39c9386eb1822efcd0e0bac40b0003fa47e3"
+      },
+      "provenance": "Docker Official Image; amd64 manifest digest resolved from registry on 2026-10-09; BookStack requires MariaDB 10.6 or newer"
+    },
+    {
+      "service": "legacy-gitea",
+      "reference": "docker.gitea.com/gitea:1.27.3@sha256:d584940b7143982682ac4541509dd628506c2b568221e6af41e5a2ead1de4fe7",
+      "source": "https://docs.gitea.com/1.27/installation/install-with-docker/",
+      "platforms": {
+        "linux/amd64": "sha256:d584940b7143982682ac4541509dd628506c2b568221e6af41e5a2ead1de4fe7"
+      },
+      "provenance": "Gitea official conventional image; amd64 manifest digest resolved from registry on 2026-10-09; persistent fixture uses /data and fresh SQLite"
+    },
+    {
+      "service": "legacy-share",
+      "reference": "nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94",
+      "source": "https://hub.docker.com/_/nginx",
+      "provenance": "Same pinned nginx runtime base as app-ui; used with a local deny-all configuration"
+    }
+  ]
+}

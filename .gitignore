@@ -175,3 +175,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+.ci-reports/
+
+.ci-tools/
+/ci/credentials/
+/infra/secrets/
+/infra/.env

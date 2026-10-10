@@ -9,6 +9,40 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Orquestração local única com preflight de segredos e par TLS antes dos quatro Compose stacks; overlay CI conectado ao
+  gateway e exporter construído na imagem, com runner bloqueado por padrão. Collector OTLP portátil habilitável pelo
+  profile `telemetry` e `OTEL_METRICS_ENABLED`.
+- Gateway NGINX em imagem derivada fixada, com TLS por certificado externo, porta local loopback, DNS dinâmico dos
+  serviços opcionais, rotas `/api`, `/auth`, `/bookstack`, `/git`, `/share` e `/ci`; o share fica fechado e BookStack
+  requer confirmação explícita após troca da senha inicial. ADR-0073 registra a topologia do gateway.
+- A API confia em um bundle CA externo montado somente leitura para validar discovery, token e JWKS do issuer HTTPS;
+  o teste de gateway usa CA sintética sem desativar validação TLS.
+- Fixture Docker isolada para BookStack/MariaDB, Gitea em volume `/data` e share read-only fechado; exige segredo de banco
+  byte-exato e alerta para trocar a conta padrão do BookStack antes de expor uma rota. ADRs-0070 a 0072 registram o
+  escopo da fixture, sem presumir a origem de bancos existentes.
+- Preparação Docker local para API, UI, MySQL e Keycloak, com imagens fixadas, redes sem portas publicadas, arquivos
+  externos de segredo, provisionamento de schema Keycloak e preflight que bloqueia configuração incompleta.
+- ADR-0069 registra o schema e o usuário MySQL separados do Keycloak dentro da instância da aplicação; ADR-0073 registra
+  o gateway TLS e as redes web separadas.
+- Configuração local revisável do controle Woodpecker 3.18.0, auditoria de aprovação/contas e proxy `/ci` com
+  bloqueio de manual/cron/restart; agente exige o profile `runner` e clone público fixado com histórico completo.
+  Exportador autenticado de saída real das etapas, retenção de logs terminais e exemplos de journald isolado; instalação
+  externa e proteção de rede pendentes.
+- Bootstrap da CI com Node.js, Gitleaks e uv verificados por SHA-256; gates API, UI e build executam testes completos,
+  testes da infraestrutura e cobertura de linhas isolada.
+- Estado por gate, consolidação segura dos sete resultados em stdout/JSON e retenção local de relatórios concluídos
+  por 14 dias e até 1 GB; o exporter da Tarefa 6B encaminha stdout real das etapas à namespace de logging dedicada.
+- Gates estáticos de Gitleaks (histórico completo e checkout com redação), Bandit, Ruff/ESLint e jscpd;
+  limites de complexidade e duplicação aprovados.
+- Preparação revisável de política persistente nftables do host para isolamento de bridges de CI, com renderer,
+  preflight de inventário e rollback limitado às tabelas próprias; sem aplicação no host. Cobertura do DNS embutido e
+  integração/persistência na VPS pendentes.
+- Script administrativo de preparação nftables valida o inventário observado e a sintaxe em namespace descartável,
+  grava saída privada atomicamente e não aplica regras nem instala ferramentas; Ubuntu Server 26.04 LTS foi escolhido
+  para a VPS futura de 8 GB, com disponibilidade da imagem pelo provedor ainda pendente.
+- ADR-0067 registra a preparação nftables para o host compartilhado, preservando o backend Docker atual; ADR-0068
+  registra o destino futuro Ubuntu sem afirmar que foi provisionado.
+
 - Sanitização allowlist de HTML em artigos e biografias na escrita e leitura pública, com bypass de HTML bruto exclusivo
   para administração e controles mínimos por artigo na área admin. Quatro cenários da integração isolada passaram.
 - Endpoints públicos de liveness (`/up` e `/liveness`) e readiness (`/ready`) com verificação limitada de MySQL e
@@ -55,6 +89,12 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Preferência de esforço atualizada para Sol baixo em orquestração e Luna médio em implementação; a sessão ativa não
+  pode ser reconfigurada por ferramenta.
+- `uv.lock` tornou-se a fonte de verdade das dependências Python, com exports `requirements` gerados e protegidos por
+  hashes; workflow e imagens Docker usam digests fixos.
+- O gate de cobertura compara contagens exatas de linhas por API, UI e código Python da CI, rejeitando relatórios
+  ausentes ou inconsistentes.
 - Documentação operacional de primeiro startup, atualização de schema/imagem, reinício da API e execução Flask/Gunicorn
   local; as Fases 1A e 1B estão concluídas localmente, sem deploy de produção.
 - Preferência de agentes atualizada para Luna com esforço médio em todas as funções, registrada no ADR-0027.
@@ -73,6 +113,13 @@ e o projeto segue [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- O renderer de firewall bloqueia destinos IPv6 fora de `2000::/3` e os prefixos especiais IANA classificados como
+  não globalmente alcançáveis; o inventário exige CIDRs explícitos em strings e rejeita números e booleanos.
+- O exporter de logs redige automaticamente seu token, rejeita downloads HTTP incompletos, mantém `success` com steps
+  `pending` como incompleto, preserva qualquer step `pending` sem prova de execução e aplica retenção após inventariar
+  todas as páginas, do pipeline mais antigo ao mais novo; ao atingir o limite de paginação sem provar o fim, falha antes
+  de exportar ou excluir logs.
+  O cursor deixa de restaurar steps removidos e recusa gravar estado acima do limite aceito pelo loader.
 - Configuração de lint dos testes JavaScript passa a reconhecer os globais da suíte Vitest.
 - URLs do build público da UI usam endereços acessíveis pelo navegador, evitando o hostname interno `api` como padrão.
 

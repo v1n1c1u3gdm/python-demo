@@ -1,0 +1,96 @@
+services:
+  server:
+    image: docker.io/woodpeckerci/woodpecker-server:v3.18.0@sha256:5192aee400df23671de8ddffb906670e93d07ae8967c7f9e50efefca3a2deea5
+    restart: unless-stopped
+    environment:
+      WOODPECKER_HOST: ${WOODPECKER_HOST:?Set WOODPECKER_HOST}
+      WOODPECKER_GITHUB_CLIENT: ${WOODPECKER_GITHUB_CLIENT:?Set WOODPECKER_GITHUB_CLIENT}
+      WOODPECKER_GITHUB_SECRET: ${WOODPECKER_GITHUB_SECRET:?Set WOODPECKER_GITHUB_SECRET}
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?Set WOODPECKER_AGENT_SECRET}
+      WOODPECKER_ADMIN: ${WOODPECKER_ADMIN:?Set the sole maintainer login}
+      WOODPECKER_OPEN: "false"
+      WOODPECKER_GITHUB: "true"
+      WOODPECKER_GITHUB_PUBLIC_ONLY: "true"
+      WOODPECKER_DEFAULT_APPROVAL_MODE: all_events
+      WOODPECKER_AUTHENTICATE_PUBLIC_REPOS: "false"
+      WOODPECKER_PLUGINS_PRIVILEGED: ""
+      WOODPECKER_PLUGINS_TRUSTED_CLONE: ""
+      WOODPECKER_DEFAULT_CLONE_PLUGIN: docker.io/woodpeckerci/plugin-git:2.10.0@sha256:0f06b03ec33137b556c77538563f66c400339052d0c5199d4c3ad1a2a37e1964
+      WOODPECKER_DATABASE_DRIVER: sqlite3
+      WOODPECKER_DATABASE_DATASOURCE: /var/lib/woodpecker/woodpecker.sqlite
+      WOODPECKER_HOSTNAME: python-demo-ci
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - woodpecker-data:/var/lib/woodpecker
+    networks:
+      - ci-control
+
+  agent:
+    profiles: [runner]
+    image: docker.io/woodpeckerci/woodpecker-agent:v3.18.0@sha256:b10103626eb87a9421e5d00eba7608c3af045f13f7dd760d0420ce9a03d15905
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      WOODPECKER_SERVER: server:9000
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?Set WOODPECKER_AGENT_SECRET}
+      WOODPECKER_MAX_WORKFLOWS: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - ci-control
+
+  exporter:
+    profiles: [logs]
+    image: docker.io/library/python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
+    working_dir: /opt
+    command: [python, -m, ci.log_exporter]
+    depends_on:
+      - server
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      CI_WOODPECKER_URL: http://server:8000/ci
+      CI_WOODPECKER_REPO_ID: ${CI_WOODPECKER_REPO_ID:?Set the Woodpecker repository ID}
+      CI_WOODPECKER_TOKEN_FILE: /run/woodpecker-control/api-token
+      CI_EXPORTER_STATE_FILE: /var/lib/ci-log-exporter/state.json
+      CI_EXPORTER_MAX_AGE_DAYS: "14"
+      CI_EXPORTER_MAX_TOTAL_BYTES: "1073741824"
+    volumes:
+      - type: bind
+        source: ./__init__.py
+        target: /opt/ci/__init__.py
+        read_only: true
+      - type: bind
+        source: ./log_exporter.py
+        target: /opt/ci/log_exporter.py
+        read_only: true
+      - type: bind
+        source: ./retention.py
+        target: /opt/ci/retention.py
+        read_only: true
+      - type: bind
+        source: ${CI_WOODPECKER_TOKEN_FILE:?Set an API token file outside the checkout}
+        target: /run/woodpecker-control/api-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - exporter-state:/var/lib/ci-log-exporter
+    networks:
+      - ci-control
+
+volumes:
+  woodpecker-data:
+  exporter-state:
+
+networks:
+  ci-control:
+    name: python-demo-ci-control
+    driver: bridge
+  ci-web:
+    name: ${CI_WEB_NETWORK:?Set CI_WEB_NETWORK to the gateway-owned web network}
+    external: true

@@ -51,6 +51,26 @@ describe('ArticleView', () => {
     expect(wrapper.vm.shareLinks.length).toBe(3)
   })
 
+  it('does not format an invalid date when a published label is supplied', async () => {
+    // Arrange
+    const article = makeArticle({
+      slug: 'labeled-article',
+      created_at: 'invalid-date',
+      published_label: 'Data editorial'
+    })
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    fetchArticleBySlug.mockResolvedValue(article)
+
+    // Act
+    const wrapper = mountView('labeled-article')
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.vm.article.dateLabel).toBe('Data editorial')
+    expect(warning).not.toHaveBeenCalled()
+    warning.mockRestore()
+  })
+
   it('falls back to first article when slug is missing', async () => {
     const articleList = [makeArticle({ slug: 'first' })]
     fetchArticleBySlug.mockResolvedValue(null)

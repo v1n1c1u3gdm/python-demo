@@ -1,0 +1,51 @@
+{
+  "secrets": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/gitleaks-scan.sh"
+    ]
+  },
+  "lint": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/lint.sh"
+    ]
+  },
+  "security": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/security.sh"
+    ]
+  },
+  "quality": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/quality.sh"
+    ]
+  },
+  "api": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/api.sh"
+    ]
+  },
+  "ui": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/ui.sh"
+    ]
+  },
+  "build": {
+    "implemented": true,
+    "command": [
+      "bash",
+      "ci/build.sh"
+    ]
+  }
+}

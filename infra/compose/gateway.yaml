@@ -1,0 +1,56 @@
+name: ${GATEWAY_PROJECT:?GATEWAY_PROJECT is required}
+
+services:
+  gateway:
+    image: python-demo-gateway:portable
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+    ports:
+      - target: 443
+        published: ${GATEWAY_HTTPS_PORT:-8443}
+        host_ip: ${GATEWAY_BIND_ADDRESS:-127.0.0.1}
+        protocol: tcp
+    environment:
+      BOOKSTACK_BOOTSTRAP_CONFIRMED: ${BOOKSTACK_BOOTSTRAP_CONFIRMED:-false}
+    volumes:
+      - type: bind
+        source: ${GATEWAY_TLS_CERT_FILE:?GATEWAY_TLS_CERT_FILE is required}
+        target: /run/tls/fullchain.pem
+        read_only: true
+        bind:
+          selinux: z
+      - type: bind
+        source: ${GATEWAY_TLS_KEY_FILE:?GATEWAY_TLS_KEY_FILE is required}
+        target: /run/tls/private-key.pem
+        read_only: true
+        bind:
+          selinux: z
+    tmpfs:
+      - /etc/nginx/routes
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    networks:
+      app_web:
+        aliases:
+          - ${PUBLIC_HOST:?PUBLIC_HOST is required}
+      legacy_web: {}
+      ci_web: {}
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_READ_SEARCH, NET_BIND_SERVICE, SETGID, SETUID]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+networks:
+  app_web:
+    name: ${APP_WEB_NETWORK:?APP_WEB_NETWORK is required}
+    external: true
+  legacy_web:
+    name: ${LEGACY_WEB_NETWORK:?LEGACY_WEB_NETWORK is required}
+    external: true
+  ci_web:
+    name: ${CI_WEB_NETWORK:?CI_WEB_NETWORK is required}
+    driver: bridge

@@ -123,37 +123,8 @@ class ProductionConfig(BaseConfig):
             )
 
         issuer = environ["KEYCLOAK_ISSUER"].strip()
-        try:
-            issuer_parts = urlsplit(issuer)
-            issuer_parts.port
-        except ValueError as exc:
-            raise ConfigurationError("KEYCLOAK_ISSUER must be an HTTPS issuer URL.") from exc
-        if (
-            issuer_parts.scheme != "https"
-            or not issuer_parts.hostname
-            or issuer_parts.username
-            or issuer_parts.password
-            or issuer_parts.query
-            or issuer_parts.fragment
-        ):
-            raise ConfigurationError("KEYCLOAK_ISSUER must be an HTTPS issuer URL.")
         base_url = environ["KEYCLOAK_BASE_URL"].strip()
-        try:
-            base_parts = urlsplit(base_url)
-            base_parts.port
-        except ValueError as exc:
-            raise ConfigurationError(
-                "KEYCLOAK_BASE_URL must be an absolute HTTP(S) URL without credentials."
-            ) from exc
-        if (
-            base_parts.scheme not in {"http", "https"}
-            or not base_parts.hostname
-            or base_parts.username
-            or base_parts.password
-            or base_parts.query
-            or base_parts.fragment
-        ):
-            raise ConfigurationError("KEYCLOAK_BASE_URL must be an absolute HTTP(S) URL without credentials.")
+        _validate_keycloak_urls(issuer, base_url)
 
         database_url = environ["DATABASE_URL"].strip()
         try:
@@ -187,6 +158,36 @@ class ProductionConfig(BaseConfig):
         settings["KEYCLOAK_CLIENT_SECRET"] = client_secret
         settings["KEYCLOAK_AUDIENCE"] = environ["KEYCLOAK_AUDIENCE"].strip()
         return settings
+
+
+def _validate_keycloak_urls(issuer: str, base_url: str) -> None:
+    issuer_error = "KEYCLOAK_ISSUER must be an HTTPS issuer URL."
+    base_error = "KEYCLOAK_BASE_URL must be an absolute HTTP(S) URL without credentials."
+    try:
+        issuer_parts = urlsplit(issuer)
+        issuer_parts.port
+    except ValueError as exc:
+        raise ConfigurationError(issuer_error) from exc
+    if not _has_safe_url_parts(issuer_parts, {"https"}):
+        raise ConfigurationError(issuer_error)
+    try:
+        base_parts = urlsplit(base_url)
+        base_parts.port
+    except ValueError as exc:
+        raise ConfigurationError(base_error) from exc
+    if not _has_safe_url_parts(base_parts, {"http", "https"}):
+        raise ConfigurationError(base_error)
+
+
+def _has_safe_url_parts(parts, schemes: set[str]) -> bool:
+    return not (
+        parts.scheme not in schemes
+        or not parts.hostname
+        or parts.username
+        or parts.password
+        or parts.query
+        or parts.fragment
+    )
 
 
 config_by_name = {
